@@ -8,7 +8,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 
 - **Monorepo**: pnpm workspaces + Turbo (`turbo.json`, `pnpm-workspace.yaml`). The desktop app lives at the project root; reusable packages are under `packages/**` and shared tooling under `tooling/**`.
 - **Frontend**: root `src/` — TanStack Start (React + Vite router). See `src/router.tsx` for route setup and `vite.config.ts` for plugins.
-- **Desktop shell**: Tauri 2 in root `src-tauri/`. Plugins: `fs` (scope `$HOME/**`), `shell` (open), `dialog`. Config at `src-tauri/tauri.conf.json`, capabilities at `src-tauri/capabilities/default.json`.
+- **Desktop shell**: Tauri 2 in root `src-tauri/`. Plugins: `fs` (scope `$HOME` plus `$HOME/**`, declared in the capability so dialog-picked paths stay inside home), `shell` (open), `dialog`. Config at `src-tauri/tauri.conf.json`, capabilities at `src-tauri/capabilities/default.json`.
 - **Static shell invariant**: Tauri loads `dist/client` as plain static files with no SSR server, so the build must emit a prerendered SPA shell at `dist/client/index.html` carrying the router bootstrap payload (`spa.prerender.outputPath: '/index'` in `vite.config.ts`). A hand-written or hand-generated `index.html` has no bootstrap payload and boots the app to a blank page, so there is deliberately no source `index.html` — the document markup lives in `src/routes/__root.tsx`. Guarded by `src/__tests__/spa-shell.test.ts`.
 - **Generated Tauri files**: `src-tauri/gen/**` is regenerated (minified) by the Tauri CLI on every build and is excluded from oxfmt — never hand-format or hand-edit it.
 - **App icons**: `src-tauri/icons/qedit_logo.svg` is the canonical source and the only artwork file kept in the repo. Sharp edge: it is an SVG wrapper around a 1024x1024 base64 PNG, not true vector art, so it cannot be rescaled above 1024px without loss and `src/__tests__/tauri-icon.test.ts` compares the generated icons against that embedded bitmap. Regenerate the full platform set with `pnpm tauri icon src-tauri/icons/qedit_logo.svg -o src-tauri/icons`; `src-tauri/tauri.conf.json` intentionally bundles the generated `icons/icon.png`.
@@ -51,7 +51,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - `verbatimModuleSyntax: true` — use `import type` for type-only imports.
 - ESM (`"type": "module"`).
 - No Supabase, Stripe, auth, or SaaS code. This is a file editor.
-- Tauri fs scope limited to `$HOME/**`. No network permissions beyond localhost.
+- Tauri fs scope limited to `$HOME` and `$HOME/**`. No network permissions beyond localhost.
 
 ## Maintaining this file
 
