@@ -6,7 +6,7 @@ use std::thread;
 
 use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
-use tauri::{Emitter, Manager, RunEvent, State};
+use tauri::{Emitter, Manager, RunEvent, Runtime, State};
 
 type SharedMaster = Arc<Mutex<Box<dyn MasterPty + Send>>>;
 type SharedWriter = Arc<Mutex<Box<dyn Write + Send>>>;
@@ -88,8 +88,8 @@ fn shell_command() -> Result<String, String> {
 }
 
 #[tauri::command]
-fn terminal_spawn(
-    app: tauri::AppHandle,
+fn terminal_spawn<R: Runtime>(
+    app: tauri::AppHandle<R>,
     state: State<'_, SharedTerminalState>,
     cwd: String,
     cols: u16,
@@ -321,4 +321,167 @@ pub fn run() {
             kill_all_terminals(&handle.state::<SharedTerminalState>());
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc::{channel, Receiver};
+    use std::time::{Duration, Instant};
+    use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
+    use tauri::Listener;
+
+    fn test_app() -> tauri::App<MockRuntime> {
+        mock_builder()
+            .manage(Arc::new(Mutex::new(TerminalState::default())) as SharedTerminalState)
+            .build(mock_context(noop_assets()))
+            .expect("failed to build mock app")
+    }
+
+    fn field(payload: &str, key: &str) -> serde_json::Value {
+        serde_json::from_str::<serde_json::Value>(payload).unwrap()[key].clone()
+    }
+
+    /// Drain terminal output until `marker` shows up, returning the transcript.
+    fn read_until(rx: &Receiver<String>, marker: &str) -> String {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut transcript = String::new();
+
+        while Instant::now() < deadline {
+            match rx.recv_timeout(Duration::from_millis(500)) {
+                Ok(chunk) => {
+                    transcript.push_str(&chunk);
+
+                    if transcript.contains(marker) {
+                        return transcript;
+                    }
+                }
+                Err(_) => continue,
+            }
+        }
+
+        panic!("timed out waiting for {marker:?}; transcript so far: {transcript:?}");
+    }
+
+    #[test]
+    fn terminal_session_runs_commands_resizes_and_cleans_up() {
+        let app = test_app();
+        let handle = app.handle().clone();
+        let (output_tx, output_rx) = channel::<String>();
+        let (exit_tx, exit_rx) = channel::<Option<u32>>();
+
+        handle.listen("terminal://output", move |event| {
+            let data = field(event.payload(), "data");
+            let _ = output_tx.send(data.as_str().unwrap_or_default().to_string());
+        });
+        handle.listen("terminal://exit", move |event| {
+            let code = field(event.payload(), "code");
+            let _ = exit_tx.send(code.as_u64().map(|value| value as u32));
+        });
+
+        // The repository checkout is inside $HOME, so it is a valid project cwd.
+        let project = env!("CARGO_MANIFEST_DIR").to_string();
+        let session_id = terminal_spawn(
+            handle.clone(),
+            handle.state::<SharedTerminalState>(),
+            project.clone(),
+            80,
+            24,
+        )
+        .expect("terminal should spawn");
+
+        let state = handle.state::<SharedTerminalState>();
+
+        terminal_write(
+            state.clone(),
+            session_id,
+            "printf 'qedit-p%s:%s\\n' 'wd' \"$PWD\"\n".to_string(),
+        )
+        .expect("terminal should accept input");
+        let transcript = read_until(&output_rx, "qedit-pwd:");
+        println!("--- terminal transcript ---\n{transcript}\n--- end transcript ---");
+        let canonical_project = std::fs::canonicalize(&project).unwrap();
+        assert!(
+            transcript.contains(&format!("qedit-pwd:{}", canonical_project.display())),
+            "shell should start in the project directory, got: {transcript:?}"
+        );
+
+        terminal_resize(state.clone(), session_id, 120, 40).expect("terminal should resize");
+        terminal_write(
+            state.clone(),
+            session_id,
+            "printf 'qedit-si%s:%s\\n' 'ze' \"$(stty size)\"\n".to_string(),
+        )
+        .expect("terminal should accept input");
+        let resized = read_until(&output_rx, "qedit-size:");
+        println!("--- resize transcript ---\n{resized}\n--- end transcript ---");
+        assert!(
+            resized.contains("qedit-size:40 120"),
+            "resize should reach the PTY, got: {resized:?}"
+        );
+
+        terminal_close(state.clone(), session_id).expect("terminal should close");
+        exit_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("closing a session should emit an exit event");
+        assert!(
+            state.lock().unwrap().sessions.is_empty(),
+            "closed sessions must not stay registered"
+        );
+
+        assert_eq!(
+            terminal_write(state, session_id, "echo late\n".to_string()),
+            Err("Terminal session is closed".to_string())
+        );
+    }
+
+    #[test]
+    fn terminal_spawn_rejects_paths_outside_home() {
+        let app = test_app();
+        let handle = app.handle().clone();
+        let error = terminal_spawn(
+            handle.clone(),
+            handle.state::<SharedTerminalState>(),
+            "/tmp".to_string(),
+            80,
+            24,
+        )
+        .expect_err("terminals must stay inside the home directory");
+
+        assert!(
+            error.contains("home directory"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn exiting_the_app_kills_every_terminal() {
+        let app = test_app();
+        let handle = app.handle().clone();
+        let (exit_tx, exit_rx) = channel::<Option<u32>>();
+        handle.listen("terminal://exit", move |event| {
+            let _ = exit_tx.send(field(event.payload(), "code").as_u64().map(|c| c as u32));
+        });
+
+        terminal_spawn(
+            handle.clone(),
+            handle.state::<SharedTerminalState>(),
+            env!("CARGO_MANIFEST_DIR").to_string(),
+            80,
+            24,
+        )
+        .expect("terminal should spawn");
+
+        kill_all_terminals(&handle.state::<SharedTerminalState>());
+
+        exit_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("app exit should terminate running shells");
+        assert!(handle
+            .state::<SharedTerminalState>()
+            .lock()
+            .unwrap()
+            .sessions
+            .is_empty());
+    }
 }
