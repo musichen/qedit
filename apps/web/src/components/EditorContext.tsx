@@ -131,6 +131,8 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   } | null>(null);
   // Track which paths have already been requested to avoid double-fetches
   const loadedRef = useRef<Set<string>>(new Set());
+  // Paths whose unsaved buffer was retained when their tab was closed
+  const dirtyOnCloseRef = useRef<Set<string>>(new Set());
 
   const loadFile = useCallback((path: string) => {
     if (loadedRef.current.has(path)) return;
@@ -161,13 +163,16 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     (path: string, name: string, lang?: string) => {
       const resolvedLang = lang ?? languageFromPath(path);
 
-      // Add tab if new
+      // Add tab if new, restoring the dirty flag of a retained buffer
       setOpenTabs((prev) => {
         const existing = prev.find((t) => t.path === path);
 
         if (existing) return prev;
 
-        return [...prev, { path, name, isModified: false }];
+        return [
+          ...prev,
+          { path, name, isModified: dirtyOnCloseRef.current.has(path) },
+        ];
       });
 
       setActiveFilePath(path);
@@ -190,8 +195,11 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
       // Drop clean buffers so reopening re-reads from disk; modified buffers
       // are kept so unsaved edits survive a close.
-      if (!openTabs[closedIdx]?.isModified) {
+      if (openTabs[closedIdx]?.isModified) {
+        dirtyOnCloseRef.current.add(path);
+      } else {
         loadedRef.current.delete(path);
+        dirtyOnCloseRef.current.delete(path);
         setFileContents((prev) => withoutKey(prev, path));
         setFileStatus((prev) => withoutKey(prev, path));
       }
@@ -260,7 +268,14 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
     const content = fileContents.get(activeFilePath);
 
-    if (content === undefined) return;
+    if (content === undefined) {
+      setSaveFailure({
+        path: activeFilePath,
+        message: `Refusing to save ${activeFilePath}: no buffer is cached for this file`,
+      });
+
+      return;
+    }
 
     setSaving(true);
     setSaveFailure(null);
