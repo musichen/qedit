@@ -1,6 +1,6 @@
 import MonacoEditor, { type OnMount } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useEditor } from './EditorContext';
 
@@ -16,14 +16,31 @@ console.log(greet('World'));
 
 export function Editor() {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+  const [monacoReady, setMonacoReady] = useState(false);
   const {
     language,
     activeFilePath,
     fileContents,
+    fileErrors,
     setCursorPosition,
     markModified,
     updateFileContent,
   } = useEditor();
+
+  // Configure monaco from the bundled package (no CDN) before first render
+  useEffect(() => {
+    let cancelled = false;
+
+    void import('#/lib/monaco-setup').then(({ configureMonaco }) => {
+      configureMonaco();
+
+      if (!cancelled) setMonacoReady(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleEditorMount: OnMount = useCallback(
     (editor, _monaco) => {
@@ -56,21 +73,26 @@ export function Editor() {
     [activeFilePath, markModified, updateFileContent],
   );
 
-  // When the active tab changes and content is available, set the editor model
-  useEffect(() => {
-    const editor = editorRef.current;
+  const readError = activeFilePath ? fileErrors.get(activeFilePath) : undefined;
 
-    if (!editor) return;
+  if (readError && activeFilePath) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 bg-background p-6 text-center">
+        <p className="text-sm font-medium text-destructive">
+          Could not open {activeFilePath}
+        </p>
+        <p className="max-w-lg text-xs text-muted-foreground">{readError}</p>
+      </div>
+    );
+  }
 
-    if (activeFilePath && fileContents.has(activeFilePath)) {
-      const content = fileContents.get(activeFilePath) ?? '';
-      const model = editor.getModel();
-
-      if (model && model.getValue() !== content) {
-        model.setValue(content);
-      }
-    }
-  }, [activeFilePath, fileContents]);
+  if (!monacoReady) {
+    return (
+      <div className="flex h-full items-center justify-center bg-background">
+        <span className="text-xs text-muted-foreground">Loading editor…</span>
+      </div>
+    );
+  }
 
   // Determine what value to show in Monaco
   const currentValue =
@@ -82,7 +104,6 @@ export function Editor() {
     <MonacoEditor
       height="100%"
       defaultLanguage="typescript"
-      defaultValue={DEFAULT_CODE}
       value={currentValue}
       language={language}
       onChange={handleChange}

@@ -24,10 +24,12 @@ interface EditorContextValue {
   openTabs: OpenTab[];
   activeFilePath: string | null;
   fileContents: Map<string, string>;
+  fileErrors: Map<string, string>;
   cursorPosition: CursorPosition;
   indentation: number;
   language: string;
   saving: boolean;
+  saveError: string | null;
   openFile: (path: string, name: string, language?: string) => void;
   closeTab: (path: string) => void;
   setActiveFile: (path: string) => void;
@@ -71,15 +73,13 @@ const languageFromPath = (path: string): string => {
   return map[ext ?? ''] ?? 'plaintext';
 };
 
-async function readFileContent(filePath: string): Promise<string> {
-  try {
-    const { readTextFile } = await import('@tauri-apps/plugin-fs');
+const errorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
-    return await readTextFile(filePath);
-  } catch {
-    // Fallback for browser dev mode
-    return `// Could not read: ${filePath}`;
-  }
+async function readFileContent(filePath: string): Promise<string> {
+  const { readTextFile } = await import('@tauri-apps/plugin-fs');
+
+  return await readTextFile(filePath);
 }
 
 async function writeFileContent(
@@ -89,10 +89,21 @@ async function writeFileContent(
   try {
     const { writeTextFile } = await import('@tauri-apps/plugin-fs');
     await writeTextFile(filePath, content);
-  } catch {
-    throw new Error(`Could not write: ${filePath}`);
+  } catch (cause) {
+    throw new Error(`Could not write ${filePath}: ${errorMessage(cause)}`, {
+      cause,
+    });
   }
 }
+
+const withoutKey = <T,>(map: Map<string, T>, key: string): Map<string, T> => {
+  if (!map.has(key)) return map;
+
+  const next = new Map(map);
+  next.delete(key);
+
+  return next;
+};
 
 export function EditorProvider({ children }: { children: ReactNode }) {
   const [openTabs, setOpenTabs] = useState<OpenTab[]>([]);
@@ -100,103 +111,100 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   const [fileContents, setFileContents] = useState<Map<string, string>>(
     new Map(),
   );
+  const [fileErrors, setFileErrors] = useState<Map<string, string>>(new Map());
   const [cursorPosition, setCursorPosition] = useState<CursorPosition>({
     line: 1,
     column: 1,
   });
   const [language, setLanguage] = useState('typescript');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   // Track which paths have already been loaded to avoid double-fetches
   const loadedRef = useRef<Set<string>>(new Set());
 
-  const openFile = useCallback((path: string, name: string, lang?: string) => {
-    const resolvedLang = lang ?? languageFromPath(path);
+  const loadFile = useCallback((path: string) => {
+    if (loadedRef.current.has(path)) return;
 
-    // Add tab if new
-    setOpenTabs((prev) => {
-      const existing = prev.find((t) => t.path === path);
+    loadedRef.current.add(path);
 
-      if (existing) return prev;
-
-      return [...prev, { path, name, isModified: false }];
-    });
-
-    setActiveFilePath(path);
-    setLanguage(resolvedLang);
-
-    // Track in recent files
-    db.addRecentFile(path, name);
-
-    // Load file content if not already loaded
-    if (!loadedRef.current.has(path)) {
-      loadedRef.current.add(path);
-      readFileContent(path)
-        .then((content) => {
-          setFileContents((prev) => {
-            const next = new Map(prev);
-            next.set(path, content);
-
-            return next;
-          });
-        })
-        .catch(() => {
-          // File couldn't be read — silently handle
-        });
-    }
+    void readFileContent(path).then(
+      (content) => {
+        setFileContents((prev) => new Map(prev).set(path, content));
+        setFileErrors((prev) => withoutKey(prev, path));
+      },
+      (error: unknown) => {
+        // Keep no content cached: an unread buffer must never be savable.
+        loadedRef.current.delete(path);
+        setFileContents((prev) => withoutKey(prev, path));
+        setFileErrors((prev) => new Map(prev).set(path, errorMessage(error)));
+      },
+    );
   }, []);
+
+  const openFile = useCallback(
+    (path: string, name: string, lang?: string) => {
+      const resolvedLang = lang ?? languageFromPath(path);
+
+      // Add tab if new
+      setOpenTabs((prev) => {
+        const existing = prev.find((t) => t.path === path);
+
+        if (existing) return prev;
+
+        return [...prev, { path, name, isModified: false }];
+      });
+
+      setActiveFilePath(path);
+      setLanguage(resolvedLang);
+
+      // Track in recent files
+      db.addRecentFile(path, name);
+
+      loadFile(path);
+    },
+    [loadFile],
+  );
 
   const closeTab = useCallback(
     (path: string) => {
-      setOpenTabs((prev) => prev.filter((t) => t.path !== path));
+      const closedIdx = openTabs.findIndex((t) => t.path === path);
+      const remaining = openTabs.filter((t) => t.path !== path);
 
-      if (path === activeFilePath) {
-        setOpenTabs((prevOpenTabs) => {
-          if (prevOpenTabs.length === 0) {
-            setActiveFilePath(null);
+      setOpenTabs(remaining);
 
-            return prevOpenTabs;
-          }
+      // Drop the cached buffer so reopening re-reads from disk
+      loadedRef.current.delete(path);
+      setFileContents((prev) => withoutKey(prev, path));
+      setFileErrors((prev) => withoutKey(prev, path));
 
-          // Find the tab adjacent to the closed one
-          const idx = Math.min(
-            prevOpenTabs.findIndex((t) => t.path === path),
-            prevOpenTabs.length - 1,
-          );
-          const newActive = prevOpenTabs[idx];
+      if (path !== activeFilePath) return;
 
-          if (newActive) {
-            setActiveFilePath(newActive.path);
-            setLanguage(languageFromPath(newActive.path));
-          }
+      if (remaining.length === 0) {
+        setActiveFilePath(null);
 
-          return prevOpenTabs;
-        });
+        return;
+      }
+
+      const nextIdx = Math.max(0, Math.min(closedIdx, remaining.length - 1));
+      const nextActive = remaining[nextIdx];
+
+      if (nextActive) {
+        setActiveFilePath(nextActive.path);
+        setLanguage(languageFromPath(nextActive.path));
       }
     },
-    [activeFilePath],
+    [activeFilePath, openTabs],
   );
 
-  const setActiveFile = useCallback((path: string) => {
-    setActiveFilePath(path);
-    setLanguage(languageFromPath(path));
+  const setActiveFile = useCallback(
+    (path: string) => {
+      setActiveFilePath(path);
+      setLanguage(languageFromPath(path));
 
-    // Load content if not yet loaded
-    if (!loadedRef.current.has(path)) {
-      loadedRef.current.add(path);
-      readFileContent(path)
-        .then((content) => {
-          setFileContents((prev) => {
-            const next = new Map(prev);
-            next.set(path, content);
-
-            return next;
-          });
-        })
-        .catch(() => {
-          // Silently handle
-        });
-    }
-  }, []);
+      loadFile(path);
+    },
+    [loadFile],
+  );
 
   const markModified = useCallback((path: string, modified: boolean) => {
     setOpenTabs((prev) =>
@@ -205,42 +213,49 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateFileContent = useCallback((path: string, content: string) => {
-    setFileContents((prev) => {
-      const next = new Map(prev);
-      next.set(path, content);
-
-      return next;
-    });
+    setFileContents((prev) => new Map(prev).set(path, content));
   }, []);
 
   const saveActiveFile = useCallback(async () => {
     if (!activeFilePath) return;
+
+    if (fileErrors.has(activeFilePath)) {
+      setSaveError(
+        `Refusing to save ${activeFilePath}: the file was never read successfully`,
+      );
+
+      return;
+    }
 
     const content = fileContents.get(activeFilePath);
 
     if (content === undefined) return;
 
     setSaving(true);
+    setSaveError(null);
 
     try {
       await writeFileContent(activeFilePath, content);
       markModified(activeFilePath, false);
-    } catch {
-      // Save failed — keep modified state
+    } catch (error) {
+      // Keep the modified state so the buffer is not presumed persisted
+      setSaveError(errorMessage(error));
     } finally {
       setSaving(false);
     }
-  }, [activeFilePath, fileContents, markModified]);
+  }, [activeFilePath, fileContents, fileErrors, markModified]);
 
   const value = useMemo<EditorContextValue>(
     () => ({
       openTabs,
       activeFilePath,
       fileContents,
+      fileErrors,
       cursorPosition,
       indentation: 2,
       language,
       saving,
+      saveError,
       openFile,
       closeTab,
       setActiveFile,
@@ -255,9 +270,11 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       openTabs,
       activeFilePath,
       fileContents,
+      fileErrors,
       cursorPosition,
       language,
       saving,
+      saveError,
       openFile,
       closeTab,
       setActiveFile,
