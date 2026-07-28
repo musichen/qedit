@@ -13,7 +13,7 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "typecheck": "turbo typecheck --cache-dir=.turbo",
-    "test": "turbo test test:unit --cache-dir=.turbo",
+    "test": "turbo test:unit --cache-dir=.turbo",
     "test:unit": "turbo test:unit --cache-dir=.turbo",
     "db:generate": "pnpm --filter @qedit/db generate",
     "db:migrate": "pnpm --filter @qedit/db migrate"

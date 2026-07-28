@@ -1,6 +1,6 @@
 import MonacoEditor, { type OnMount } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useEditor } from './EditorContext';
 
@@ -16,22 +16,43 @@ console.log(greet('World'));
 
 export function Editor() {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
-  const { language, setCursorPosition, markModified, activeFilePath } =
-    useEditor();
+  const [monacoReady, setMonacoReady] = useState(false);
+  const {
+    language,
+    activeFilePath,
+    fileContents,
+    fileStatus,
+    setCursorPosition,
+    markModified,
+    updateFileContent,
+  } = useEditor();
+
+  // Configure monaco from the bundled package (no CDN) before first render
+  useEffect(() => {
+    let cancelled = false;
+
+    void import('#/lib/monaco-setup').then(({ configureMonaco }) => {
+      configureMonaco();
+
+      if (!cancelled) setMonacoReady(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleEditorMount: OnMount = useCallback(
     (editor, _monaco) => {
       editorRef.current = editor;
       editor.focus();
 
-      // Report initial cursor position
       const pos = editor.getPosition();
 
       if (pos) {
         setCursorPosition({ line: pos.lineNumber, column: pos.column });
       }
 
-      // Listen for cursor changes
       editor.onDidChangeCursorPosition((e) => {
         setCursorPosition({
           line: e.position.lineNumber,
@@ -43,19 +64,60 @@ export function Editor() {
   );
 
   const handleChange = useCallback(
-    (_value: string | undefined) => {
+    (value: string | undefined) => {
       if (activeFilePath) {
         markModified(activeFilePath, true);
+        updateFileContent(activeFilePath, value ?? '');
       }
     },
-    [activeFilePath, markModified],
+    [activeFilePath, markModified, updateFileContent],
   );
+
+  const status = activeFilePath ? fileStatus.get(activeFilePath) : undefined;
+
+  if (activeFilePath && status?.kind === 'error') {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 bg-background p-6 text-center">
+        <p className="text-sm font-medium text-destructive">
+          Could not open {activeFilePath}
+        </p>
+        <p className="max-w-lg text-xs text-muted-foreground">
+          {status.message}
+        </p>
+      </div>
+    );
+  }
+
+  if (!monacoReady) {
+    return (
+      <div className="flex h-full items-center justify-center bg-background">
+        <span className="text-xs text-muted-foreground">Loading editor…</span>
+      </div>
+    );
+  }
+
+  // Never mount Monaco over a file whose read has not completed: the fallback
+  // content must not be editable into an unread buffer.
+  if (activeFilePath && status?.kind !== 'loaded') {
+    return (
+      <div className="flex h-full items-center justify-center bg-background">
+        <span className="text-xs text-muted-foreground">
+          Loading {activeFilePath}…
+        </span>
+      </div>
+    );
+  }
+
+  // Determine what value to show in Monaco
+  const currentValue = activeFilePath
+    ? (fileContents.get(activeFilePath) ?? '')
+    : DEFAULT_CODE;
 
   return (
     <MonacoEditor
       height="100%"
       defaultLanguage="typescript"
-      defaultValue={DEFAULT_CODE}
+      value={currentValue}
       language={language}
       onChange={handleChange}
       onMount={handleEditorMount}

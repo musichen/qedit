@@ -1,8 +1,14 @@
 import { useEditor } from './EditorContext';
 
 export function StatusBar() {
-  const { activeFilePath, cursorPosition, indentation, language, saving } =
-    useEditor();
+  const {
+    activeFilePath,
+    cursorPosition,
+    indentation,
+    language,
+    saving,
+    saveError,
+  } = useEditor();
 
   const fileName = activeFilePath?.split('/').pop() ?? '—';
   const displayPath = activeFilePath ?? 'No file open';
@@ -16,6 +22,15 @@ export function StatusBar() {
         </span>
         {saving && (
           <span className="animate-pulse text-amber-500">Saving...</span>
+        )}
+        {!saving && saveError && (
+          <span
+            role="alert"
+            title={saveError}
+            className="max-w-[40ch] truncate text-destructive"
+          >
+            {saveError}
+          </span>
         )}
       </div>
       <div className="flex items-center gap-4">
