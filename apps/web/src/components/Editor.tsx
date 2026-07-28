@@ -1,6 +1,6 @@
 import MonacoEditor, { type OnMount } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import { useEditor } from './EditorContext';
 
@@ -16,22 +16,26 @@ console.log(greet('World'));
 
 export function Editor() {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
-  const { language, setCursorPosition, markModified, activeFilePath } =
-    useEditor();
+  const {
+    language,
+    activeFilePath,
+    fileContents,
+    setCursorPosition,
+    markModified,
+    updateFileContent,
+  } = useEditor();
 
   const handleEditorMount: OnMount = useCallback(
     (editor, _monaco) => {
       editorRef.current = editor;
       editor.focus();
 
-      // Report initial cursor position
       const pos = editor.getPosition();
 
       if (pos) {
         setCursorPosition({ line: pos.lineNumber, column: pos.column });
       }
 
-      // Listen for cursor changes
       editor.onDidChangeCursorPosition((e) => {
         setCursorPosition({
           line: e.position.lineNumber,
@@ -43,19 +47,43 @@ export function Editor() {
   );
 
   const handleChange = useCallback(
-    (_value: string | undefined) => {
+    (value: string | undefined) => {
       if (activeFilePath) {
         markModified(activeFilePath, true);
+        updateFileContent(activeFilePath, value ?? '');
       }
     },
-    [activeFilePath, markModified],
+    [activeFilePath, markModified, updateFileContent],
   );
+
+  // When the active tab changes and content is available, set the editor model
+  useEffect(() => {
+    const editor = editorRef.current;
+
+    if (!editor) return;
+
+    if (activeFilePath && fileContents.has(activeFilePath)) {
+      const content = fileContents.get(activeFilePath) ?? '';
+      const model = editor.getModel();
+
+      if (model && model.getValue() !== content) {
+        model.setValue(content);
+      }
+    }
+  }, [activeFilePath, fileContents]);
+
+  // Determine what value to show in Monaco
+  const currentValue =
+    activeFilePath && fileContents.has(activeFilePath)
+      ? (fileContents.get(activeFilePath) ?? '')
+      : DEFAULT_CODE;
 
   return (
     <MonacoEditor
       height="100%"
       defaultLanguage="typescript"
       defaultValue={DEFAULT_CODE}
+      value={currentValue}
       language={language}
       onChange={handleChange}
       onMount={handleEditorMount}

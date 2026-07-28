@@ -1,7 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router';
+import { useCallback, useEffect } from 'react';
 
 import { Editor } from '#/components/Editor';
-import { EditorProvider } from '#/components/EditorContext';
+import { EditorProvider, useEditor } from '#/components/EditorContext';
 import { FileTree } from '#/components/FileTree';
 import { StatusBar } from '#/components/StatusBar';
 import { TabBar } from '#/components/TabBar';
@@ -13,30 +14,49 @@ export const Route = createFileRoute('/')({
 function Index() {
   return (
     <EditorProvider>
-      <div className="grid h-screen w-screen overflow-hidden bg-background text-foreground">
-        {/* Main layout: sidebar | (tabbar + editor) */}
-        <div className="grid grid-cols-[240px_1fr] grid-rows-[auto_1fr_auto] h-screen">
-          {/* FileTree sidebar - spans all rows on the left */}
-          <div className="col-start-1 row-span-3 row-start-1 overflow-hidden">
-            <FileTree />
-          </div>
+      <EditorLayout />
+    </EditorProvider>
+  );
+}
 
-          {/* Tab bar - top of right panel */}
-          <div className="col-start-2 row-start-1">
-            <TabBar />
-          </div>
+function EditorLayout() {
+  const { saveActiveFile } = useEditor();
 
-          {/* Editor area - center of right panel */}
-          <div className="col-start-2 row-start-2 overflow-hidden">
-            <Editor />
-          </div>
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        void saveActiveFile();
+      }
+    },
+    [saveActiveFile],
+  );
 
-          {/* Status bar - bottom, spans both columns */}
-          <div className="col-span-2 row-start-3">
-            <StatusBar />
-          </div>
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
+
+  return (
+    <div className="grid h-screen w-screen overflow-hidden bg-background text-foreground">
+      <div className="grid grid-cols-[240px_1fr] grid-rows-[auto_1fr_auto] h-screen">
+        <div className="col-start-1 row-span-3 row-start-1 overflow-hidden">
+          <FileTree />
+        </div>
+
+        <div className="col-start-2 row-start-1">
+          <TabBar />
+        </div>
+
+        <div className="col-start-2 row-start-2 overflow-hidden">
+          <Editor />
+        </div>
+
+        <div className="col-span-2 row-start-3">
+          <StatusBar />
         </div>
       </div>
-    </EditorProvider>
+    </div>
   );
 }

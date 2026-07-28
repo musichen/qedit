@@ -1,3 +1,5 @@
+import { db } from '@qedit/db';
+import type { recentFiles } from '@qedit/db/schema';
 import {
   ChevronRight,
   Folder,
@@ -17,18 +19,29 @@ interface FileEntry {
   children?: FileEntry[];
 }
 
+type RecentFileRow = typeof recentFiles.$inferSelect;
+
+async function getHomeDir(): Promise<string> {
+  try {
+    const { homeDir } = await import('@tauri-apps/api/path');
+
+    return await homeDir();
+  } catch {
+    return '/home/user';
+  }
+}
+
 async function readDirectory(dirPath: string): Promise<FileEntry[]> {
   try {
-    // Dynamic import — only works in Tauri context
     const { readDir } = await import('@tauri-apps/plugin-fs');
+    const { join } = await import('@tauri-apps/api/path');
     const entries = await readDir(dirPath);
 
     const result: FileEntry[] = [];
 
     for (const entry of entries) {
-      // Skip hidden files/folders
       if (entry.name.startsWith('.')) continue;
-      // Skip node_modules and common large dirs
+
       if (
         entry.isDirectory &&
         ['node_modules', 'target', '.git', 'dist', '.turbo'].includes(
@@ -39,12 +52,11 @@ async function readDirectory(dirPath: string): Promise<FileEntry[]> {
 
       result.push({
         name: entry.name,
-        path: `${dirPath}/${entry.name}`,
+        path: await join(dirPath, entry.name),
         isDirectory: entry.isDirectory ?? false,
       });
     }
 
-    // Sort: directories first, then alphabetically
     result.sort((a, b) => {
       if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
 
@@ -53,54 +65,45 @@ async function readDirectory(dirPath: string): Promise<FileEntry[]> {
 
     return result;
   } catch {
-    // Fallback for browser dev mode — show empty tree
     return [];
   }
-}
-
-/** Resolve ~ to actual home directory */
-function resolveHome(path: string): string {
-  if (path.startsWith('~/')) {
-    const home =
-      typeof window !== 'undefined'
-        ? (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
-          ? // In Tauri: try common macOS home
-            '/Users/' + (path.split('/')[0] === '~' ? '' : '')
-          : ''
-        : '';
-
-    return home || '/home/user';
-  }
-
-  return path;
 }
 
 export function FileTree() {
   const { activeFilePath, openFile } = useEditor();
   const [rootEntries, setRootEntries] = useState<FileEntry[]>([]);
-  const [rootPath, _setRootPath] = useState<string>(() =>
-    typeof window !== 'undefined'
-      ? ((import.meta as { env?: Record<string, string> }).env?.VITE_HOME_DIR ??
-        '/Users/musichen')
-      : '/Users/musichen',
-  );
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [recentFilesList, setRecentFilesList] = useState<RecentFileRow[]>([]);
 
-  // Load home directory on mount
-  const loadRoot = useCallback(async () => {
-    setLoading(true);
-
-    try {
-      const entries = await readDirectory(resolveHome(rootPath));
-      setRootEntries(entries);
-    } finally {
-      setLoading(false);
-    }
-  }, [rootPath]);
-
+  // Resolve home directory at runtime
   useEffect(() => {
-    void loadRoot();
-  }, [loadRoot]);
+    getHomeDir()
+      .then((home) => {
+        setLoading(true);
+
+        return readDirectory(home);
+      })
+      .then((entries) => {
+        setRootEntries(entries);
+        setLoading(false);
+      })
+      .catch(() => {
+        setLoading(false);
+      });
+  }, []);
+
+  // Refresh recent files from DB when active file changes
+  useEffect(() => {
+    setRecentFilesList(db.getRecentFiles(10));
+  }, [activeFilePath]);
+
+  const handleOpenRecent = useCallback(
+    (filePath: string) => {
+      const name = filePath.split('/').pop() ?? filePath;
+      openFile(filePath, name);
+    },
+    [openFile],
+  );
 
   return (
     <div className="flex h-full flex-col border-r bg-muted/30">
@@ -117,10 +120,31 @@ export function FileTree() {
           Recent
         </div>
         <div className="mt-1">
-          {/* Recent files would be populated from DB — placeholder */}
-          <p className="px-2 text-xs text-muted-foreground/60">
-            No recent files
-          </p>
+          {recentFilesList.length === 0 ? (
+            <p className="px-2 text-xs text-muted-foreground/60">
+              No recent files
+            </p>
+          ) : (
+            recentFilesList.map((rf) => (
+              <div
+                key={rf.id}
+                className={`flex cursor-pointer items-center gap-1.5 rounded px-2 py-0.5 text-xs transition-colors hover:bg-muted ${
+                  activeFilePath === rf.filePath
+                    ? 'bg-muted text-foreground'
+                    : 'text-muted-foreground'
+                }`}
+                onClick={() => handleOpenRecent(rf.filePath)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleOpenRecent(rf.filePath);
+                }}
+                role="button"
+                tabIndex={0}
+              >
+                <File className="h-3 w-3 shrink-0 text-blue-500" />
+                <span className="truncate">{rf.displayName}</span>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
