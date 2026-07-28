@@ -10,7 +10,6 @@
     "beforeBuildCommand": "pnpm build"
   },
   "app": {
-    "title": "qedit",
     "windows": [
       {
         "title": "qedit",
