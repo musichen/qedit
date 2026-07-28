@@ -1,174 +1,200 @@
-import { db } from '@qedit/db';
-import type { recentFiles } from '@qedit/db/schema';
 import {
+  AlertCircle,
   ChevronRight,
+  Clock,
+  File,
+  FilePlus2,
   Folder,
   FolderOpen,
-  File,
-  Clock,
+  FolderPlus,
   Home,
+  RefreshCw,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { useEditor } from './EditorContext';
+import { useWorkspace } from './WorkspaceContext';
 
-interface FileEntry {
-  name: string;
-  path: string;
-  isDirectory: boolean;
-  children?: FileEntry[];
-}
-
-type RecentFileRow = typeof recentFiles.$inferSelect;
-
-async function getHomeDir(): Promise<string> {
-  try {
-    const { homeDir } = await import('@tauri-apps/api/path');
-
-    return await homeDir();
-  } catch {
-    return '/home/user';
-  }
-}
-
-async function readDirectory(dirPath: string): Promise<FileEntry[]> {
-  try {
-    const { readDir } = await import('@tauri-apps/plugin-fs');
-    const { join } = await import('@tauri-apps/api/path');
-    const entries = await readDir(dirPath);
-
-    const result: FileEntry[] = [];
-
-    for (const entry of entries) {
-      if (entry.name.startsWith('.')) continue;
-
-      if (
-        entry.isDirectory &&
-        ['node_modules', 'target', '.git', 'dist', '.turbo'].includes(
-          entry.name,
-        )
-      )
-        continue;
-
-      result.push({
-        name: entry.name,
-        path: await join(dirPath, entry.name),
-        isDirectory: entry.isDirectory ?? false,
-      });
-    }
-
-    result.sort((a, b) => {
-      if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
-
-      return a.name.localeCompare(b.name);
-    });
-
-    return result;
-  } catch {
-    return [];
-  }
-}
+import type { WorkspaceEntry } from '#/lib/workspace-bridge';
+import {
+  basenameFromPath,
+  readWorkspaceDirectory,
+} from '#/lib/workspace-bridge';
 
 export function FileTree() {
   const { activeFilePath, openFile } = useEditor();
-  const [rootEntries, setRootEntries] = useState<FileEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [recentFilesList, setRecentFilesList] = useState<RecentFileRow[]>([]);
+  const {
+    workspaceRoot,
+    rootEntries,
+    recentFiles,
+    recentProjects,
+    loading,
+    error,
+    openFileDialog,
+    openFolderDialog,
+    openRecentFile,
+    openRecentProject,
+    registerEntries,
+    retryWorkspace,
+  } = useWorkspace();
 
-  // Resolve home directory at runtime
-  useEffect(() => {
-    getHomeDir()
-      .then((home) => {
-        setLoading(true);
-
-        return readDirectory(home);
-      })
-      .then((entries) => {
-        setRootEntries(entries);
-        setLoading(false);
-      })
-      .catch(() => {
-        setLoading(false);
-      });
-  }, []);
-
-  // Refresh recent files from DB when active file changes
-  useEffect(() => {
-    setRecentFilesList(db.getRecentFiles(10));
-  }, [activeFilePath]);
-
-  const handleOpenRecent = useCallback(
-    (filePath: string) => {
-      const name = filePath.split('/').pop() ?? filePath;
-      openFile(filePath, name);
+  const handleOpenRecentFile = useCallback(
+    (filePath: string, displayName: string) => {
+      void openRecentFile(filePath, displayName);
     },
-    [openFile],
+    [openRecentFile],
   );
 
   return (
-    <div className="flex h-full flex-col border-r bg-muted/30">
-      {/* Header */}
-      <div className="flex items-center gap-2 border-b px-3 py-2">
-        <Home className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="text-xs font-medium">Explorer</span>
-      </div>
-
-      {/* Recent Files */}
-      <div className="border-b px-2 py-1.5">
-        <div className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          <Clock className="h-3 w-3" />
-          Recent
+    <aside className="flex h-full min-h-0 flex-col border-r bg-muted/30">
+      <div className="flex items-center justify-between border-b px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <Home className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <span className="truncate text-xs font-medium">Explorer</span>
         </div>
-        <div className="mt-1">
-          {recentFilesList.length === 0 ? (
-            <p className="px-2 text-xs text-muted-foreground/60">
-              No recent files
-            </p>
-          ) : (
-            recentFilesList.map((rf) => (
-              <div
-                key={rf.id}
-                className={`flex cursor-pointer items-center gap-1.5 rounded px-2 py-0.5 text-xs transition-colors hover:bg-muted ${
-                  activeFilePath === rf.filePath
-                    ? 'bg-muted text-foreground'
-                    : 'text-muted-foreground'
-                }`}
-                onClick={() => handleOpenRecent(rf.filePath)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleOpenRecent(rf.filePath);
-                }}
-                role="button"
-                tabIndex={0}
-              >
-                <File className="h-3 w-3 shrink-0 text-blue-500" />
-                <span className="truncate">{rf.displayName}</span>
-              </div>
-            ))
-          )}
+        <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            onClick={() => void openFileDialog()}
+            aria-label="Open file"
+            title="Open File (Cmd/Ctrl+O)"
+          >
+            <FilePlus2 className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            onClick={() => void openFolderDialog()}
+            aria-label="Open folder"
+            title="Open Folder or Project (Cmd/Ctrl+Shift+O)"
+          >
+            <FolderPlus className="h-3.5 w-3.5" />
+          </button>
         </div>
       </div>
 
-      {/* Directory Tree */}
       <div className="flex-1 overflow-auto">
-        {loading ? (
-          <div className="px-3 py-2 text-xs text-muted-foreground">
-            Loading...
-          </div>
-        ) : (
-          <div className="py-1">
-            {rootEntries.map((entry) => (
-              <TreeNode
-                key={entry.path}
-                entry={entry}
-                depth={0}
-                activeFilePath={activeFilePath}
-                onOpenFile={openFile}
-              />
-            ))}
+        {error && (
+          <div className="m-2 rounded border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">
+            <div className="flex items-start gap-1.5">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span className="min-w-0 break-words">{error}</span>
+            </div>
+            {workspaceRoot && (
+              <button
+                type="button"
+                className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium underline underline-offset-2"
+                onClick={retryWorkspace}
+              >
+                <RefreshCw className="h-3 w-3" />
+                Retry
+              </button>
+            )}
           </div>
         )}
+
+        <section className="border-b px-2 py-2">
+          <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <Clock className="h-3 w-3" />
+            Recent
+          </div>
+          {recentProjects.length === 0 && recentFiles.length === 0 ? (
+            <p className="px-1 text-xs text-muted-foreground/60">
+              No recent items
+            </p>
+          ) : (
+            <div className="space-y-0.5">
+              {recentProjects.slice(0, 5).map((project) => (
+                <button
+                  key={project.projectPath}
+                  type="button"
+                  className="flex w-full min-w-0 items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                  onClick={() => void openRecentProject(project.projectPath)}
+                  title={project.projectPath}
+                >
+                  <Folder className="h-3 w-3 shrink-0 text-amber-500" />
+                  <span className="truncate">{project.displayName}</span>
+                </button>
+              ))}
+              {recentFiles.slice(0, 5).map((file) => (
+                <button
+                  key={file.filePath}
+                  type="button"
+                  className={`flex w-full min-w-0 items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs hover:bg-muted ${
+                    activeFilePath === file.filePath
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground'
+                  }`}
+                  onClick={() =>
+                    handleOpenRecentFile(file.filePath, file.displayName)
+                  }
+                  title={file.filePath}
+                >
+                  <File className="h-3 w-3 shrink-0 text-blue-500" />
+                  <span className="truncate">{file.displayName}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="min-h-0">
+          <div className="flex items-center gap-1 border-b px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            {workspaceRoot ? (
+              <>
+                <FolderOpen className="h-3 w-3 text-amber-500" />
+                <span className="truncate" title={workspaceRoot}>
+                  {basenameFromPath(workspaceRoot)}
+                </span>
+              </>
+            ) : (
+              <span>Workspace</span>
+            )}
+          </div>
+          {!workspaceRoot ? (
+            <div className="space-y-2 px-3 py-3 text-xs text-muted-foreground">
+              <p>Open a folder to browse its files.</p>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded border px-2 py-1.5 font-medium text-foreground hover:bg-muted"
+                onClick={() => void openFolderDialog()}
+              >
+                <FolderPlus className="h-3.5 w-3.5" />
+                Open Folder
+              </button>
+            </div>
+          ) : loading ? (
+            <p className="px-3 py-3 text-xs text-muted-foreground">
+              Loading workspace...
+            </p>
+          ) : rootEntries.length === 0 && !error ? (
+            <p className="px-3 py-3 text-xs text-muted-foreground">
+              No visible files in this folder.
+            </p>
+          ) : (
+            <div
+              className="py-1"
+              role="tree"
+              aria-label={`${basenameFromPath(workspaceRoot)} files`}
+            >
+              <div key={workspaceRoot}>
+                {rootEntries.map((entry) => (
+                  <TreeNode
+                    key={entry.path}
+                    entry={entry}
+                    depth={0}
+                    activeFilePath={activeFilePath}
+                    onOpenFile={openFile}
+                    onEntriesLoaded={registerEntries}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
       </div>
-    </div>
+    </aside>
   );
 }
 
@@ -177,15 +203,33 @@ function TreeNode({
   depth,
   activeFilePath,
   onOpenFile,
+  onEntriesLoaded,
 }: {
-  entry: FileEntry;
+  entry: WorkspaceEntry;
   depth: number;
   activeFilePath: string | null;
   onOpenFile: (path: string, name: string) => void;
+  onEntriesLoaded: (entries: WorkspaceEntry[]) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [children, setChildren] = useState<FileEntry[] | null>(null);
+  const [children, setChildren] = useState<WorkspaceEntry[] | null>(null);
   const [loadingChildren, setLoadingChildren] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const loadChildren = useCallback(async () => {
+    setLoadingChildren(true);
+    setLoadError(null);
+
+    try {
+      const entries = await readWorkspaceDirectory(entry.path);
+      setChildren(entries);
+      onEntriesLoaded(entries);
+    } catch (cause) {
+      setLoadError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setLoadingChildren(false);
+    }
+  }, [entry.path, onEntriesLoaded]);
 
   const handleToggle = useCallback(async () => {
     if (!entry.isDirectory) {
@@ -194,18 +238,10 @@ function TreeNode({
       return;
     }
 
-    if (!expanded && children === null) {
-      setLoadingChildren(true);
+    if (!expanded && children === null) await loadChildren();
 
-      try {
-        const entries = await readDirectory(entry.path);
-        setChildren(entries);
-      } finally {
-        setLoadingChildren(false);
-      }
-    }
-    setExpanded(!expanded);
-  }, [entry, expanded, children, onOpenFile]);
+    setExpanded((value) => !value);
+  }, [children, entry, expanded, loadChildren, onOpenFile]);
 
   const isActive = activeFilePath === entry.path;
   const paddingLeft = 8 + depth * 16;
@@ -213,48 +249,63 @@ function TreeNode({
   return (
     <div>
       <div
-        className={`flex cursor-pointer items-center gap-1 px-2 py-0.5 text-xs transition-colors hover:bg-muted ${
+        className={`group flex cursor-pointer items-center gap-1 px-2 py-1 text-xs transition-colors hover:bg-muted ${
           isActive ? 'bg-muted text-foreground' : 'text-muted-foreground'
         }`}
         style={{ paddingLeft: `${paddingLeft}px` }}
         onClick={() => void handleToggle()}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') void handleToggle();
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            void handleToggle();
+          }
         }}
         role="treeitem"
         aria-expanded={entry.isDirectory ? expanded : undefined}
+        aria-selected={isActive}
         tabIndex={0}
       >
         {entry.isDirectory ? (
-          <>
-            <ChevronRight
-              className={`h-3 w-3 shrink-0 transition-transform ${
-                expanded ? 'rotate-90' : ''
-              }`}
-            />
-            {expanded ? (
-              <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-            ) : (
-              <Folder className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-            )}
-          </>
+          <ChevronRight
+            className={`h-3 w-3 shrink-0 transition-transform ${
+              expanded ? 'rotate-90' : ''
+            }`}
+          />
         ) : (
-          <>
-            <span className="w-3 shrink-0" />
-            <File className="h-3.5 w-3.5 shrink-0 text-blue-500" />
-          </>
+          <span className="w-3 shrink-0" />
         )}
-        <span className="truncate">{entry.name}</span>
+        {entry.isDirectory ? (
+          expanded ? (
+            <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+          ) : (
+            <Folder className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+          )
+        ) : (
+          <File className="h-3.5 w-3.5 shrink-0 text-blue-500" />
+        )}
+        <span className="min-w-0 truncate">{entry.name}</span>
+        {loadingChildren && (
+          <span className="ml-auto text-[10px] text-muted-foreground">...</span>
+        )}
       </div>
       {expanded && entry.isDirectory && (
-        <div>
-          {loadingChildren ? (
-            <div
-              className="px-2 py-0.5 text-xs text-muted-foreground"
-              style={{ paddingLeft: `${paddingLeft + 16}px` }}
+        <div role="group">
+          {loadError ? (
+            <button
+              type="button"
+              className="ml-8 flex items-center gap-1 px-2 py-1 text-left text-[11px] text-destructive hover:underline"
+              onClick={() => void loadChildren()}
             >
-              Loading...
-            </div>
+              <RefreshCw className="h-3 w-3" />
+              Retry folder
+            </button>
+          ) : children?.length === 0 ? (
+            <p
+              className="px-2 py-1 text-[11px] text-muted-foreground"
+              style={{ paddingLeft: `${paddingLeft + 32}px` }}
+            >
+              Empty folder
+            </p>
           ) : (
             children?.map((child) => (
               <TreeNode
@@ -263,6 +314,7 @@ function TreeNode({
                 depth={depth + 1}
                 activeFilePath={activeFilePath}
                 onOpenFile={onOpenFile}
+                onEntriesLoaded={onEntriesLoaded}
               />
             ))
           )}

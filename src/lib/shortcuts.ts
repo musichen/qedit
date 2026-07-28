@@ -1,0 +1,48 @@
+export type ShortcutAction =
+  | 'open-file'
+  | 'open-folder'
+  | 'save'
+  | 'save-as'
+  | 'close-tab'
+  | 'quick-open'
+  | 'find';
+
+function isTextEditingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+
+  const isEditable = (element: Element): boolean =>
+    element.matches('input, textarea') ||
+    element.getAttribute('contenteditable') === 'true' ||
+    (element as HTMLElement).contentEditable === 'true' ||
+    (element as HTMLElement).isContentEditable === true;
+
+  const editingAncestor = target.closest(
+    'input, textarea, [contenteditable="true"]',
+  );
+
+  return (
+    isEditable(target) ||
+    (editingAncestor !== null && isEditable(editingAncestor))
+  );
+}
+
+export function shortcutActionForEvent(
+  event: Pick<
+    KeyboardEvent,
+    'key' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'target'
+  >,
+): ShortcutAction | null {
+  if (!(event.metaKey || event.ctrlKey) || isTextEditingTarget(event.target)) {
+    return null;
+  }
+
+  const key = event.key.toLowerCase();
+
+  if (key === 'o') return event.shiftKey ? 'open-folder' : 'open-file';
+  if (key === 's') return event.shiftKey ? 'save-as' : 'save';
+  if (key === 'w') return 'close-tab';
+  if (key === 'p') return 'quick-open';
+  if (key === 'f') return 'find';
+
+  return null;
+}

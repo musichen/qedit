@@ -1,2 +1,2 @@
-export { sessions, recentFiles } from './schema';
+export { sessions, recentFiles, recentProjects } from './schema';
 export { db } from './client';

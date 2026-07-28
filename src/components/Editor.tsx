@@ -3,16 +3,7 @@ import type { editor } from 'monaco-editor';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useEditor } from './EditorContext';
-
-const DEFAULT_CODE = `// Welcome to qedit
-// A lightweight file editor
-
-function greet(name: string): string {
-  return \`Hello, \${name}!\`;
-}
-
-console.log(greet('World'));
-`;
+import { EmptyState } from './EmptyState';
 
 export function Editor() {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
@@ -27,7 +18,6 @@ export function Editor() {
     updateFileContent,
   } = useEditor();
 
-  // Configure monaco from the bundled package (no CDN) before first render
   useEffect(() => {
     let cancelled = false;
 
@@ -42,21 +32,31 @@ export function Editor() {
     };
   }, []);
 
-  const handleEditorMount: OnMount = useCallback(
-    (editor, _monaco) => {
-      editorRef.current = editor;
-      editor.focus();
+  useEffect(() => {
+    const handleFind = () => {
+      editorRef.current?.trigger('keyboard', 'actions.find', null);
+    };
 
-      const pos = editor.getPosition();
+    window.addEventListener('qedit:find', handleFind);
+
+    return () => window.removeEventListener('qedit:find', handleFind);
+  }, []);
+
+  const handleEditorMount: OnMount = useCallback(
+    (mountedEditor, _monaco) => {
+      editorRef.current = mountedEditor;
+      mountedEditor.focus();
+
+      const pos = mountedEditor.getPosition();
 
       if (pos) {
         setCursorPosition({ line: pos.lineNumber, column: pos.column });
       }
 
-      editor.onDidChangeCursorPosition((e) => {
+      mountedEditor.onDidChangeCursorPosition((event) => {
         setCursorPosition({
-          line: e.position.lineNumber,
-          column: e.position.column,
+          line: event.position.lineNumber,
+          column: event.position.column,
         });
       });
     },
@@ -75,7 +75,9 @@ export function Editor() {
 
   const status = activeFilePath ? fileStatus.get(activeFilePath) : undefined;
 
-  if (activeFilePath && status?.kind === 'error') {
+  if (!activeFilePath) return <EmptyState />;
+
+  if (status?.kind === 'error') {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 bg-background p-6 text-center">
         <p className="text-sm font-medium text-destructive">
@@ -91,27 +93,24 @@ export function Editor() {
   if (!monacoReady) {
     return (
       <div className="flex h-full items-center justify-center bg-background">
-        <span className="text-xs text-muted-foreground">Loading editor…</span>
+        <span className="text-xs text-muted-foreground">Loading editor...</span>
       </div>
     );
   }
 
-  // Never mount Monaco over a file whose read has not completed: the fallback
+  // Never mount Monaco over a file whose read has not completed. The fallback
   // content must not be editable into an unread buffer.
-  if (activeFilePath && status?.kind !== 'loaded') {
+  if (status?.kind !== 'loaded') {
     return (
       <div className="flex h-full items-center justify-center bg-background">
         <span className="text-xs text-muted-foreground">
-          Loading {activeFilePath}…
+          Loading {activeFilePath}...
         </span>
       </div>
     );
   }
 
-  // Determine what value to show in Monaco
-  const currentValue = activeFilePath
-    ? (fileContents.get(activeFilePath) ?? '')
-    : DEFAULT_CODE;
+  const currentValue = fileContents.get(activeFilePath) ?? '';
 
   return (
     <MonacoEditor

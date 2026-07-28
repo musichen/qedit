@@ -1,11 +1,15 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { Editor } from '#/components/Editor';
 import { EditorProvider, useEditor } from '#/components/EditorContext';
 import { FileTree } from '#/components/FileTree';
+import { QuickOpen } from '#/components/QuickOpen';
 import { StatusBar } from '#/components/StatusBar';
 import { TabBar } from '#/components/TabBar';
+import { TerminalPanel } from '#/components/TerminalPanel';
+import { useWorkspace, WorkspaceProvider } from '#/components/WorkspaceContext';
+import { shortcutActionForEvent } from '#/lib/shortcuts';
 
 export const Route = createFileRoute('/')({
   component: Index,
@@ -14,22 +18,59 @@ export const Route = createFileRoute('/')({
 function Index() {
   return (
     <EditorProvider>
-      <EditorLayout />
+      <WorkspaceProvider>
+        <EditorLayout />
+      </WorkspaceProvider>
     </EditorProvider>
   );
 }
 
 function EditorLayout() {
-  const { saveActiveFile } = useEditor();
+  const { activeFilePath, closeTab, saveActiveFile, saveActiveFileAs } =
+    useEditor();
+  const { openFileDialog, openFolderDialog } = useWorkspace();
+  const [quickOpenVisible, setQuickOpenVisible] = useState(false);
 
   const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-        e.preventDefault();
-        void saveActiveFile();
+    (event: KeyboardEvent) => {
+      const action = shortcutActionForEvent(event);
+
+      if (!action) return;
+
+      event.preventDefault();
+
+      switch (action) {
+        case 'open-file':
+          void openFileDialog();
+          break;
+        case 'open-folder':
+          void openFolderDialog();
+          break;
+        case 'save':
+          void saveActiveFile();
+          break;
+        case 'save-as':
+          void saveActiveFileAs();
+          break;
+        case 'close-tab':
+          if (activeFilePath) closeTab(activeFilePath);
+          break;
+        case 'quick-open':
+          setQuickOpenVisible(true);
+          break;
+        case 'find':
+          window.dispatchEvent(new Event('qedit:find'));
+          break;
       }
     },
-    [saveActiveFile],
+    [
+      activeFilePath,
+      closeTab,
+      openFileDialog,
+      openFolderDialog,
+      saveActiveFile,
+      saveActiveFileAs,
+    ],
   );
 
   useEffect(() => {
@@ -40,8 +81,8 @@ function EditorLayout() {
 
   return (
     <div className="grid h-screen w-screen overflow-hidden bg-background text-foreground">
-      <div className="grid grid-cols-[240px_1fr] grid-rows-[auto_1fr_auto] h-screen">
-        <div className="col-start-1 row-span-3 row-start-1 overflow-hidden">
+      <div className="grid h-screen grid-cols-[240px_1fr] grid-rows-[auto_1fr_auto_auto]">
+        <div className="col-start-1 row-span-3 row-start-1 min-h-0 overflow-hidden">
           <FileTree />
         </div>
 
@@ -49,14 +90,21 @@ function EditorLayout() {
           <TabBar />
         </div>
 
-        <div className="col-start-2 row-start-2 overflow-hidden">
+        <div className="col-start-2 row-start-2 min-h-0 overflow-hidden">
           <Editor />
         </div>
 
-        <div className="col-span-2 row-start-3">
+        <div className="col-start-2 row-start-3">
+          <TerminalPanel />
+        </div>
+
+        <div className="col-span-2 row-start-4">
           <StatusBar />
         </div>
       </div>
+      {quickOpenVisible && (
+        <QuickOpen onClose={() => setQuickOpenVisible(false)} />
+      )}
     </div>
   );
 }
