@@ -24,9 +24,14 @@ export function TerminalPanel() {
   const terminalRef = useRef<import('@xterm/xterm').Terminal | null>(null);
   const sessionRef = useRef<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [terminalState, setTerminalState] = useState<
+    'starting' | 'ready' | 'exited' | 'error'
+  >('starting');
 
   useEffect(() => {
     let disposed = false;
+    setError(null);
+    setTerminalState('starting');
     const disposers: Array<() => void> = [];
 
     const runDisposers = () => {
@@ -66,6 +71,7 @@ export function TerminalPanel() {
         }
         if (!cwd) {
           setError('Open a folder to start a project terminal.');
+          setTerminalState('error');
           return;
         }
 
@@ -86,6 +92,7 @@ export function TerminalPanel() {
             `\r\n[process exited${event.code === null ? '' : ` with code ${event.code}`} ]\r\n`,
           );
           sessionRef.current = null;
+          setTerminalState('exited');
         };
 
         const routeEvent = (id: number, event: TerminalEvent) => {
@@ -133,8 +140,12 @@ export function TerminalPanel() {
         const replay = buffered.get(sessionId) ?? [];
         buffered.clear();
         ownSessionId = sessionId;
-        sessionRef.current = sessionId;
+        const exitedBeforeAttach = replay.some(
+          (event) => event.kind === 'exit',
+        );
+        sessionRef.current = exitedBeforeAttach ? null : sessionId;
         for (const event of replay) applyEvent(event);
+        if (!exitedBeforeAttach) setTerminalState('ready');
 
         terminal.onData((data) => {
           void writeTerminal(sessionId, data).catch((cause: unknown) =>
@@ -152,6 +163,7 @@ export function TerminalPanel() {
       } catch (cause) {
         if (!disposed) {
           setError(cause instanceof Error ? cause.message : String(cause));
+          setTerminalState('error');
         }
       }
     }
@@ -167,13 +179,40 @@ export function TerminalPanel() {
     };
   }, [workspaceRoot]);
 
+  useEffect(() => {
+    const focusTerminal = () => terminalRef.current?.focus();
+
+    window.addEventListener('qedit:focus-terminal', focusTerminal);
+
+    return () =>
+      window.removeEventListener('qedit:focus-terminal', focusTerminal);
+  }, []);
+
+  const stateLabel =
+    terminalState === 'starting'
+      ? 'Starting...'
+      : terminalState === 'ready'
+        ? 'Ready'
+        : terminalState === 'exited'
+          ? 'Exited'
+          : 'Unavailable';
+
   return (
     <section className="flex h-52 min-h-0 flex-col border-t bg-[#111318]">
       <div className="flex h-7 shrink-0 items-center gap-2 border-b border-white/10 px-3 text-[11px] font-medium text-slate-300">
         <TerminalIcon className="h-3.5 w-3.5" />
         Terminal
+        <span
+          className={
+            terminalState === 'error' ? 'text-red-300' : 'text-slate-500'
+          }
+        >
+          {stateLabel}
+        </span>
         {workspaceRoot && (
-          <span className="truncate text-slate-500">{workspaceRoot}</span>
+          <span className="min-w-0 truncate text-slate-500">
+            {workspaceRoot}
+          </span>
         )}
       </div>
       {error && (

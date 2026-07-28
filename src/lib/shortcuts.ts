@@ -4,6 +4,11 @@ export type ShortcutAction =
   | 'save'
   | 'save-as'
   | 'close-tab'
+  | 'reopen-tab'
+  | 'reload-file'
+  | 'next-tab'
+  | 'previous-tab'
+  | 'focus-terminal'
   | 'quick-open'
   | 'find';
 
@@ -52,6 +57,15 @@ export function shortcutActionForEvent(
   if (key === 'o') return event.shiftKey ? 'open-folder' : 'open-file';
   if (key === 's') return event.shiftKey ? 'save-as' : 'save';
   if (key === 'w') return 'close-tab';
+  if (key === 't' && event.shiftKey) return 'reopen-tab';
+  if (key === 'r' && event.shiftKey) return 'reload-file';
+  if (key === 'pagedown' || (key === 'tab' && event.shiftKey === false)) {
+    return 'next-tab';
+  }
+  if (key === 'pageup' || (key === 'tab' && event.shiftKey)) {
+    return 'previous-tab';
+  }
+  if (key === '`') return 'focus-terminal';
   if (key === 'p') return 'quick-open';
   if (key === 'f') return 'find';
 

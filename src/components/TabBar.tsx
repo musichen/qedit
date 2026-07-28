@@ -1,4 +1,5 @@
 import { Save, X } from 'lucide-react';
+import { useRef } from 'react';
 
 import { useEditor } from './EditorContext';
 import type { OpenTab } from './EditorContext';
@@ -11,6 +12,16 @@ export function TabBar() {
     closeTab,
     saveActiveFileAs,
   } = useEditor();
+  const tabRefs = useRef(new Map<string, HTMLDivElement>());
+
+  const navigateTab = (index: number) => {
+    const tab = openTabs[index];
+
+    if (!tab) return;
+
+    setActiveFile(tab.path);
+    requestAnimationFrame(() => tabRefs.current.get(tab.path)?.focus());
+  };
 
   return (
     <div className="flex h-9 items-stretch border-b bg-muted/50">
@@ -20,13 +31,29 @@ export function TabBar() {
             No open files
           </span>
         ) : (
-          openTabs.map((tab) => (
+          openTabs.map((tab, index) => (
             <Tab
               key={tab.path}
               tab={tab}
               isActive={tab.path === activeFilePath}
               onSelect={() => setActiveFile(tab.path)}
               onClose={() => closeTab(tab.path)}
+              setRef={(node) => {
+                if (node) tabRefs.current.set(tab.path, node);
+                else tabRefs.current.delete(tab.path);
+              }}
+              onNavigate={(direction) => {
+                const nextIndex =
+                  direction === 'next'
+                    ? (index + 1) % openTabs.length
+                    : direction === 'previous'
+                      ? (index - 1 + openTabs.length) % openTabs.length
+                      : direction === 'first'
+                        ? 0
+                        : openTabs.length - 1;
+
+                navigateTab(nextIndex);
+              }}
             />
           ))
         )}
@@ -52,14 +79,19 @@ function Tab({
   isActive,
   onSelect,
   onClose,
+  setRef,
+  onNavigate,
 }: {
   tab: OpenTab;
   isActive: boolean;
   onSelect: () => void;
   onClose: () => boolean;
+  setRef: (node: HTMLDivElement | null) => void;
+  onNavigate: (direction: 'next' | 'previous' | 'first' | 'last') => void;
 }) {
   return (
     <div
+      ref={setRef}
       className={`group flex h-full min-w-0 max-w-56 cursor-pointer items-center gap-1.5 border-r px-3 text-sm transition-colors ${
         isActive
           ? 'border-t-2 border-t-primary bg-background text-foreground'
@@ -70,11 +102,26 @@ function Tab({
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
           onSelect();
+          return;
+        }
+
+        if (event.key === 'ArrowRight') {
+          event.preventDefault();
+          onNavigate('next');
+        } else if (event.key === 'ArrowLeft') {
+          event.preventDefault();
+          onNavigate('previous');
+        } else if (event.key === 'Home') {
+          event.preventDefault();
+          onNavigate('first');
+        } else if (event.key === 'End') {
+          event.preventDefault();
+          onNavigate('last');
         }
       }}
       role="tab"
       aria-selected={isActive}
-      tabIndex={0}
+      tabIndex={isActive ? 0 : -1}
     >
       <span className="flex min-w-0 items-center gap-1">
         {tab.isModified && (

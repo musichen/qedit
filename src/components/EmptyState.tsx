@@ -64,6 +64,11 @@ export function EmptyState() {
             ⌘/Ctrl P
           </kbd>{' '}
           quick open
+          <span className="mx-2 text-muted-foreground/50">·</span>
+          <kbd className="rounded border bg-muted px-1.5 py-0.5 font-mono">
+            ⌘/Ctrl Shift T
+          </kbd>{' '}
+          reopen
         </p>
       </div>
 
@@ -78,13 +83,13 @@ export function EmptyState() {
               <button
                 type="button"
                 key={project.projectPath}
-                className="flex items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-muted"
+                className="flex min-w-0 items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-muted"
                 onClick={() => void openRecentProject(project.projectPath)}
               >
                 <span className="truncate font-medium">
                   {project.displayName}
                 </span>
-                <span className="ml-3 truncate text-xs text-muted-foreground">
+                <span className="ml-3 min-w-0 truncate text-xs text-muted-foreground">
                   {project.projectPath}
                 </span>
               </button>
@@ -93,14 +98,14 @@ export function EmptyState() {
               <button
                 type="button"
                 key={file.filePath}
-                className="flex items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-muted"
+                className="flex min-w-0 items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-muted"
                 onClick={() =>
                   void openWorkspaceFile(file.filePath, file.displayName)
                 }
                 title={file.filePath}
               >
                 <span className="truncate font-medium">{file.displayName}</span>
-                <span className="ml-3 truncate text-xs text-muted-foreground">
+                <span className="ml-3 min-w-0 truncate text-xs text-muted-foreground">
                   {dirnameFromPath(file.filePath)}
                 </span>
               </button>

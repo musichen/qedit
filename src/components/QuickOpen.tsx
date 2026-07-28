@@ -1,18 +1,73 @@
 import { File, Folder } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useWorkspace } from './WorkspaceContext';
 
 import { dirnameFromPath } from '#/lib/workspace-bridge';
 
+interface QuickEntry {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  isFile: boolean;
+}
+
 export function QuickOpen({ onClose }: { onClose: () => void }) {
   const { knownFiles, recentFiles, openWorkspaceFile } = useWorkspace();
   const inputRef = useRef<HTMLInputElement>(null);
+  const optionRefs = useRef(new Map<string, HTMLButtonElement>());
   const [query, setQuery] = useState('');
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  const entries = useMemo<QuickEntry[]>(() => {
+    const byPath = new Map<string, QuickEntry>();
+
+    for (const entry of knownFiles) byPath.set(entry.path, entry);
+    for (const file of recentFiles) {
+      if (!byPath.has(file.filePath)) {
+        byPath.set(file.filePath, {
+          name: file.displayName,
+          path: file.filePath,
+          isDirectory: false,
+          isFile: true,
+        });
+      }
+    }
+
+    return [...byPath.values()];
+  }, [knownFiles, recentFiles]);
+
+  const filtered = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+
+    if (!normalized) return entries.slice(0, 30);
+
+    return entries
+      .filter(
+        (entry) =>
+          entry.name.toLowerCase().includes(normalized) ||
+          entry.path.toLowerCase().includes(normalized),
+      )
+      .slice(0, 30);
+  }, [entries, query]);
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [query]);
+
+  useEffect(() => {
+    const selected = filtered[selectedIndex];
+
+    if (selected) {
+      optionRefs.current.get(selected.path)?.scrollIntoView?.({
+        block: 'nearest',
+      });
+    }
+  }, [filtered, selectedIndex]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -26,17 +81,6 @@ export function QuickOpen({ onClose }: { onClose: () => void }) {
 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
-
-  const filtered = query
-    ? knownFiles.filter((entry) =>
-        entry.name.toLowerCase().includes(query.toLowerCase()),
-      )
-    : recentFiles.slice(0, 15).map((refile) => ({
-        name: refile.displayName,
-        path: refile.filePath,
-        isDirectory: false,
-        isFile: true,
-      }));
 
   const handleSelect = useCallback(
     (path: string, name: string) => {
@@ -57,55 +101,113 @@ export function QuickOpen({ onClose }: { onClose: () => void }) {
         className="w-full max-w-lg rounded-lg border bg-background shadow-xl"
         onClick={(event) => event.stopPropagation()}
         role="listbox"
+        aria-label="Files"
       >
         <div className="border-b px-3 py-2">
           <input
             ref={inputRef}
             type="text"
             className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-            placeholder="Search files by name..."
+            placeholder="Search files by name or path..."
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Escape') onClose();
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                onClose();
+                return;
+              }
+
+              if (event.key === 'ArrowDown' && filtered.length > 0) {
+                event.preventDefault();
+                setSelectedIndex((index) =>
+                  Math.min(index + 1, filtered.length - 1),
+                );
+                return;
+              }
+
+              if (event.key === 'ArrowUp' && filtered.length > 0) {
+                event.preventDefault();
+                setSelectedIndex((index) => Math.max(index - 1, 0));
+                return;
+              }
+
+              if (event.key === 'Home' && filtered.length > 0) {
+                event.preventDefault();
+                setSelectedIndex(0);
+                return;
+              }
+
+              if (event.key === 'End' && filtered.length > 0) {
+                event.preventDefault();
+                setSelectedIndex(filtered.length - 1);
+                return;
+              }
 
               if (event.key === 'Enter' && filtered.length > 0) {
-                const entry = filtered[0];
+                event.preventDefault();
+                const entry = filtered[selectedIndex] ?? filtered[0];
 
                 if (entry) handleSelect(entry.path, entry.name);
               }
             }}
             aria-label="Search files"
+            aria-controls="qedit-quick-open-options"
+            aria-activedescendant={
+              filtered[selectedIndex]
+                ? `quick-open-${encodeURIComponent(filtered[selectedIndex].path)}`
+                : undefined
+            }
           />
         </div>
-        <div className="max-h-64 overflow-auto p-1">
+        <div
+          id="qedit-quick-open-options"
+          className="max-h-64 overflow-auto p-1"
+        >
           {filtered.length === 0 ? (
             <p className="px-2 py-4 text-center text-xs text-muted-foreground">
-              {query ? 'No matching files' : 'No files open in workspace'}
+              {query ? 'No matching files' : 'No recent or workspace files'}
             </p>
           ) : (
-            filtered.map((entry) => (
+            filtered.map((entry, index) => (
               <button
                 key={entry.path}
+                ref={(node) => {
+                  if (node) optionRefs.current.set(entry.path, node);
+                  else optionRefs.current.delete(entry.path);
+                }}
                 type="button"
-                className="flex w-full min-w-0 items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-muted"
+                className={`flex w-full min-w-0 items-center gap-2 rounded px-2 py-1.5 text-left text-sm ${
+                  index === selectedIndex
+                    ? 'bg-muted text-foreground'
+                    : 'hover:bg-muted'
+                }`}
+                onMouseEnter={() => setSelectedIndex(index)}
                 onClick={() => handleSelect(entry.path, entry.name)}
                 title={entry.path}
                 role="option"
-                aria-selected={false}
+                aria-selected={index === selectedIndex}
+                id={`quick-open-${encodeURIComponent(entry.path)}`}
               >
                 {entry.isDirectory ? (
                   <Folder className="h-3.5 w-3.5 shrink-0 text-amber-500" />
                 ) : (
                   <File className="h-3.5 w-3.5 shrink-0 text-blue-500" />
                 )}
-                <span className="truncate">{entry.name}</span>
-                <span className="ml-auto shrink-0 truncate text-[11px] text-muted-foreground">
+                <span className="min-w-0 flex-1 truncate">{entry.name}</span>
+                <span className="ml-auto max-w-[55%] min-w-0 truncate text-[11px] text-muted-foreground">
                   {dirnameFromPath(entry.path)}
                 </span>
               </button>
             ))
           )}
+        </div>
+        <div className="border-t px-3 py-1.5 text-[11px] text-muted-foreground">
+          <kbd className="rounded border bg-muted px-1">↑↓</kbd> navigate
+          <span className="mx-2">·</span>
+          <kbd className="rounded border bg-muted px-1">Enter</kbd> open
+          <span className="mx-2">·</span>
+          <kbd className="rounded border bg-muted px-1">Esc</kbd> close
         </div>
       </div>
     </div>
