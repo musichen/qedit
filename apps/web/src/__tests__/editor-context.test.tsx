@@ -1,12 +1,32 @@
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { EditorProvider, useEditor } from '../components/EditorContext';
+
+const readTextFile = vi.fn<(path: string) => Promise<string>>();
+const writeTextFile = vi.fn<(path: string, content: string) => Promise<void>>();
+
+vi.mock('@tauri-apps/plugin-fs', () => ({
+  readTextFile: (path: string) => readTextFile(path),
+  writeTextFile: (path: string, content: string) =>
+    writeTextFile(path, content),
+}));
+
+const pending = <T,>(): Promise<T> => new Promise<T>(() => {});
 
 const wrapper = ({ children }: { children: ReactNode }) => (
   <EditorProvider>{children}</EditorProvider>
 );
+
+beforeEach(() => {
+  readTextFile.mockReset();
+  writeTextFile.mockReset();
+  // Reads hang unless a test opts into a resolved or rejected read, so
+  // every file starts in a deterministic 'loading' state.
+  readTextFile.mockImplementation(() => pending<string>());
+  writeTextFile.mockResolvedValue(undefined);
+});
 
 describe('EditorContext', () => {
   describe('openFile', () => {
@@ -44,6 +64,43 @@ describe('EditorContext', () => {
 
       expect(result.current.activeFilePath).toBe('/home/b.ts');
       expect(result.current.openTabs).toHaveLength(2);
+    });
+
+    it('caches the file contents once the read resolves', async () => {
+      readTextFile.mockResolvedValue('file body');
+
+      const { result } = renderHook(() => useEditor(), { wrapper });
+
+      act(() => {
+        result.current.openFile('/home/test.ts', 'test.ts');
+      });
+
+      await waitFor(() => {
+        expect(result.current.fileStatus.get('/home/test.ts')).toEqual({
+          kind: 'loaded',
+        });
+      });
+      expect(result.current.fileContents.get('/home/test.ts')).toBe(
+        'file body',
+      );
+    });
+
+    it('records an error status when the read rejects', async () => {
+      readTextFile.mockRejectedValue(new Error('permission denied'));
+
+      const { result } = renderHook(() => useEditor(), { wrapper });
+
+      act(() => {
+        result.current.openFile('/home/test.ts', 'test.ts');
+      });
+
+      await waitFor(() => {
+        expect(result.current.fileStatus.get('/home/test.ts')).toEqual({
+          kind: 'error',
+          message: 'permission denied',
+        });
+      });
+      expect(result.current.fileContents.has('/home/test.ts')).toBe(false);
     });
   });
 
@@ -135,7 +192,7 @@ describe('EditorContext', () => {
   });
 
   describe('updateFileContent', () => {
-    it('does not update content for a file that has not been loaded', () => {
+    it('does not update content for a file that is still loading', () => {
       const { result } = renderHook(() => useEditor(), { wrapper });
 
       act(() => {
@@ -146,9 +203,32 @@ describe('EditorContext', () => {
         result.current.updateFileContent('/home/test.ts', 'new content');
       });
 
-      // File is still "loading" since Tauri read isn't mocked,
-      // so updateFileContent must be a no-op
+      expect(result.current.fileStatus.get('/home/test.ts')).toEqual({
+        kind: 'loading',
+      });
       expect(result.current.fileContents.get('/home/test.ts')).toBeUndefined();
+    });
+
+    it('updates content once the file is loaded', async () => {
+      readTextFile.mockResolvedValue('original');
+
+      const { result } = renderHook(() => useEditor(), { wrapper });
+
+      act(() => {
+        result.current.openFile('/home/test.ts', 'test.ts');
+      });
+
+      await waitFor(() => {
+        expect(result.current.fileStatus.get('/home/test.ts')).toEqual({
+          kind: 'loaded',
+        });
+      });
+
+      act(() => {
+        result.current.updateFileContent('/home/test.ts', 'edited');
+      });
+
+      expect(result.current.fileContents.get('/home/test.ts')).toBe('edited');
     });
   });
 
@@ -161,6 +241,7 @@ describe('EditorContext', () => {
       });
 
       expect(result.current.saveError).toBeNull();
+      expect(writeTextFile).not.toHaveBeenCalled();
     });
 
     it('reports error when trying to save a still-loading file', async () => {
@@ -170,12 +251,93 @@ describe('EditorContext', () => {
         result.current.openFile('/home/test.ts', 'test.ts');
       });
 
-      // File is still "loading" — save must report an error
       await act(async () => {
         await result.current.saveActiveFile();
       });
 
       expect(result.current.saveError).toContain('still loading');
+      expect(writeTextFile).not.toHaveBeenCalled();
+    });
+
+    it('refuses to save a file whose read failed', async () => {
+      readTextFile.mockRejectedValue(new Error('permission denied'));
+
+      const { result } = renderHook(() => useEditor(), { wrapper });
+
+      act(() => {
+        result.current.openFile('/home/test.ts', 'test.ts');
+      });
+
+      await waitFor(() => {
+        expect(result.current.fileStatus.get('/home/test.ts')?.kind).toBe(
+          'error',
+        );
+      });
+
+      await act(async () => {
+        await result.current.saveActiveFile();
+      });
+
+      expect(result.current.saveError).toContain('was never read successfully');
+      expect(writeTextFile).not.toHaveBeenCalled();
+    });
+
+    it('writes the buffer and clears the dirty flag on success', async () => {
+      readTextFile.mockResolvedValue('original');
+
+      const { result } = renderHook(() => useEditor(), { wrapper });
+
+      act(() => {
+        result.current.openFile('/home/test.ts', 'test.ts');
+      });
+
+      await waitFor(() => {
+        expect(result.current.fileStatus.get('/home/test.ts')?.kind).toBe(
+          'loaded',
+        );
+      });
+
+      act(() => {
+        result.current.updateFileContent('/home/test.ts', 'edited');
+        result.current.markModified('/home/test.ts', true);
+      });
+
+      await act(async () => {
+        await result.current.saveActiveFile();
+      });
+
+      expect(writeTextFile).toHaveBeenCalledWith('/home/test.ts', 'edited');
+      expect(result.current.saveError).toBeNull();
+      expect(result.current.openTabs[0]?.isModified).toBe(false);
+    });
+
+    it('keeps the dirty flag and reports the error when the write fails', async () => {
+      readTextFile.mockResolvedValue('original');
+      writeTextFile.mockRejectedValue(new Error('disk full'));
+
+      const { result } = renderHook(() => useEditor(), { wrapper });
+
+      act(() => {
+        result.current.openFile('/home/test.ts', 'test.ts');
+      });
+
+      await waitFor(() => {
+        expect(result.current.fileStatus.get('/home/test.ts')?.kind).toBe(
+          'loaded',
+        );
+      });
+
+      act(() => {
+        result.current.updateFileContent('/home/test.ts', 'edited');
+        result.current.markModified('/home/test.ts', true);
+      });
+
+      await act(async () => {
+        await result.current.saveActiveFile();
+      });
+
+      expect(result.current.saveError).toContain('disk full');
+      expect(result.current.openTabs[0]?.isModified).toBe(true);
     });
   });
 });
