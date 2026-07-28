@@ -1,8 +1,8 @@
+import { describe, it, expect } from 'vitest';
+
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-
-import { describe, it, expect } from 'vitest';
 
 // Tauri serves dist/client as plain static files, so the client entry can only
 // hydrate if the build emits a prerendered SPA shell carrying the router
@@ -28,7 +28,10 @@ describe('Tauri static client build', () => {
 
 describe('client entry', () => {
   it('hydrates the prerendered document with StartClient', () => {
-    const clientEntry = readFileSync(join(webRoot, 'src', 'client.tsx'), 'utf-8');
+    const clientEntry = readFileSync(
+      join(webRoot, 'src', 'client.tsx'),
+      'utf-8',
+    );
 
     expect(clientEntry).toContain('StartClient');
     expect(clientEntry).toContain('hydrateRoot');
