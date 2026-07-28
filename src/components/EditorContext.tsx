@@ -12,6 +12,7 @@ import type { ReactNode } from 'react';
 import {
   basenameFromPath,
   errorMessage,
+  readNativeTextFile,
   saveNativeFile,
   writeNativeTextFile,
 } from '#/lib/workspace-bridge';
@@ -97,12 +98,6 @@ const browserConfirm = (message: string): boolean => {
   return window.confirm(message);
 };
 
-async function readFileContent(filePath: string): Promise<string> {
-  const { readTextFile } = await import('@tauri-apps/plugin-fs');
-
-  return await readTextFile(filePath);
-}
-
 const withoutKey = <T,>(map: Map<string, T>, key: string): Map<string, T> => {
   if (!map.has(key)) return map;
 
@@ -136,17 +131,21 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   // deliberately not retained because closing them requires explicit
   // confirmation to discard their edits.
   const closedTabsRef = useRef<OpenTab[]>([]);
+  // Request ids are monotonic across the whole provider, never per path, so a
+  // path whose entry is dropped on close (or replaced by Save As) can never
+  // reuse an id an in-flight read is still waiting to match.
+  const nextLoadRequestRef = useRef(1);
   const loadRequestRef = useRef<Map<string, number>>(new Map());
 
   const loadFile = useCallback((path: string) => {
     if (loadedRef.current.has(path)) return;
 
     loadedRef.current.add(path);
-    const requestId = (loadRequestRef.current.get(path) ?? 0) + 1;
+    const requestId = nextLoadRequestRef.current++;
     loadRequestRef.current.set(path, requestId);
     setFileStatus((prev) => new Map(prev).set(path, { kind: 'loading' }));
 
-    void readFileContent(path).then(
+    void readNativeTextFile(path).then(
       (content) => {
         if (loadRequestRef.current.get(path) !== requestId) return;
 
@@ -427,7 +426,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       loadedRef.current.delete(activeFilePath);
       loadRequestRef.current.delete(activeFilePath);
       loadedRef.current.add(targetPath);
-      loadRequestRef.current.set(targetPath, 1);
+      loadRequestRef.current.set(targetPath, nextLoadRequestRef.current++);
       setActiveFilePath(targetPath);
       setLanguage(languageFromPath(targetPath));
       db.addRecentFile(targetPath, targetName);

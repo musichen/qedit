@@ -62,15 +62,29 @@ describe('shortcutActionForEvent', () => {
     ).toBeNull();
   });
 
-  it('leaves terminal input shortcuts to xterm', () => {
+  it('leaves terminal input shortcuts to xterm but keeps a way back out', () => {
     const terminal = document.createElement('textarea');
     terminal.className = 'xterm-helper-textarea';
 
     expect(shortcutActionForEvent(event({ key: 's', target: terminal }))).toBe(
       null,
     );
-    expect(shortcutActionForEvent(event({ key: '`', target: terminal }))).toBe(
+    expect(shortcutActionForEvent(event({ key: 'w', target: terminal }))).toBe(
       null,
+    );
+    expect(shortcutActionForEvent(event({ key: '`', target: terminal }))).toBe(
+      'focus-editor',
+    );
+  });
+
+  it('toggles focus back to the editor from anywhere inside the terminal', () => {
+    const terminalRoot = document.createElement('div');
+    terminalRoot.className = 'xterm';
+    const screen = document.createElement('div');
+    terminalRoot.append(screen);
+
+    expect(shortcutActionForEvent(event({ key: '`', target: screen }))).toBe(
+      'focus-editor',
     );
   });
 

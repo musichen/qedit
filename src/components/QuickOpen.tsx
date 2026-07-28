@@ -1,15 +1,14 @@
-import { File, Folder } from 'lucide-react';
+import { File } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useWorkspace } from './WorkspaceContext';
 
 import { dirnameFromPath } from '#/lib/workspace-bridge';
 
+/** Quick open only ever lists files: directories are not openable buffers. */
 interface QuickEntry {
   name: string;
   path: string;
-  isDirectory: boolean;
-  isFile: boolean;
 }
 
 export function QuickOpen({ onClose }: { onClose: () => void }) {
@@ -22,14 +21,14 @@ export function QuickOpen({ onClose }: { onClose: () => void }) {
   const entries = useMemo<QuickEntry[]>(() => {
     const byPath = new Map<string, QuickEntry>();
 
-    for (const entry of knownFiles) byPath.set(entry.path, entry);
+    for (const entry of knownFiles) {
+      byPath.set(entry.path, { name: entry.name, path: entry.path });
+    }
     for (const file of recentFiles) {
       if (!byPath.has(file.filePath)) {
         byPath.set(file.filePath, {
           name: file.displayName,
           path: file.filePath,
-          isDirectory: false,
-          isFile: true,
         });
       }
     }
@@ -189,11 +188,7 @@ export function QuickOpen({ onClose }: { onClose: () => void }) {
                 aria-selected={index === selectedIndex}
                 id={`quick-open-${encodeURIComponent(entry.path)}`}
               >
-                {entry.isDirectory ? (
-                  <Folder className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-                ) : (
-                  <File className="h-3.5 w-3.5 shrink-0 text-blue-500" />
-                )}
+                <File className="h-3.5 w-3.5 shrink-0 text-blue-500" />
                 <span className="min-w-0 flex-1 truncate">{entry.name}</span>
                 <span className="ml-auto max-w-[55%] min-w-0 truncate text-[11px] text-muted-foreground">
                   {dirnameFromPath(entry.path)}

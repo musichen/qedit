@@ -100,6 +100,9 @@ function EditorLayout() {
         case 'focus-terminal':
           window.dispatchEvent(new Event('qedit:focus-terminal'));
           break;
+        case 'focus-editor':
+          window.dispatchEvent(new Event('qedit:focus-editor'));
+          break;
         case 'quick-open':
           setQuickOpenVisible(true);
           break;

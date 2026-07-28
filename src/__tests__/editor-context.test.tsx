@@ -96,6 +96,45 @@ describe('EditorContext', () => {
       );
     });
 
+    it('ignores a stale read that resolves after the tab was closed and reopened', async () => {
+      const resolvers: Array<(content: string) => void> = [];
+      readTextFile.mockImplementation(
+        () => new Promise<string>((resolve) => resolvers.push(resolve)),
+      );
+
+      const { result } = renderHook(() => useEditor(), { wrapper });
+
+      act(() => {
+        result.current.openFile('/home/big.ts', 'big.ts');
+      });
+
+      await waitFor(() => expect(resolvers).toHaveLength(1));
+
+      act(() => {
+        expect(result.current.closeTab('/home/big.ts')).toBe(true);
+      });
+
+      act(() => {
+        result.current.openFile('/home/big.ts', 'big.ts');
+      });
+
+      await waitFor(() => expect(resolvers).toHaveLength(2));
+
+      await act(async () => {
+        resolvers[1]?.('current disk content');
+        resolvers[0]?.('stale buffer');
+      });
+
+      await waitFor(() => {
+        expect(result.current.fileStatus.get('/home/big.ts')).toEqual({
+          kind: 'loaded',
+        });
+      });
+      expect(result.current.fileContents.get('/home/big.ts')).toBe(
+        'current disk content',
+      );
+    });
+
     it('records an error status when the read rejects', async () => {
       readTextFile.mockRejectedValue(new Error('permission denied'));
 
@@ -108,7 +147,7 @@ describe('EditorContext', () => {
       await waitFor(() => {
         expect(result.current.fileStatus.get('/home/test.ts')).toEqual({
           kind: 'error',
-          message: 'permission denied',
+          message: 'Could not read /home/test.ts: permission denied',
         });
       });
       expect(result.current.fileContents.has('/home/test.ts')).toBe(false);

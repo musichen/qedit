@@ -9,6 +9,7 @@ export type ShortcutAction =
   | 'next-tab'
   | 'previous-tab'
   | 'focus-terminal'
+  | 'focus-editor'
   | 'quick-open'
   | 'find';
 
@@ -20,6 +21,21 @@ export type ShortcutAction =
  */
 function isMonacoTarget(target: Element): boolean {
   return target.closest('.monaco-editor') !== null;
+}
+
+/**
+ * Xterm owns a hidden `<textarea class="xterm-helper-textarea">`, so terminal
+ * focus otherwise swallows every workspace shortcut with no keyboard way back
+ * out. Only the focus binding is exempted; everything else still belongs to the
+ * shell so ordinary typing is untouched.
+ */
+function isTerminalTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+
+  return (
+    target.closest('.xterm') !== null ||
+    target.closest('.xterm-helper-textarea') !== null
+  );
 }
 
 function isTextEditingTarget(target: EventTarget | null): boolean {
@@ -48,11 +64,15 @@ export function shortcutActionForEvent(
     'key' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'target'
   >,
 ): ShortcutAction | null {
-  if (!(event.metaKey || event.ctrlKey) || isTextEditingTarget(event.target)) {
-    return null;
-  }
+  if (!(event.metaKey || event.ctrlKey)) return null;
 
   const key = event.key.toLowerCase();
+
+  if (key === '`') {
+    return isTerminalTarget(event.target) ? 'focus-editor' : 'focus-terminal';
+  }
+
+  if (isTextEditingTarget(event.target)) return null;
 
   if (key === 'o') return event.shiftKey ? 'open-folder' : 'open-file';
   if (key === 's') return event.shiftKey ? 'save-as' : 'save';
@@ -65,7 +85,6 @@ export function shortcutActionForEvent(
   if (key === 'pageup' || (key === 'tab' && event.shiftKey)) {
     return 'previous-tab';
   }
-  if (key === '`') return 'focus-terminal';
   if (key === 'p') return 'quick-open';
   if (key === 'f') return 'find';
 

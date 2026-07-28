@@ -25,13 +25,17 @@ export function TabBar() {
 
   return (
     <div className="flex h-9 items-stretch border-b bg-muted/50">
-      <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto">
-        {openTabs.length === 0 ? (
-          <span className="flex items-center px-4 text-xs text-muted-foreground">
-            No open files
-          </span>
-        ) : (
-          openTabs.map((tab, index) => (
+      {openTabs.length === 0 ? (
+        <span className="flex min-w-0 flex-1 items-center px-4 text-xs text-muted-foreground">
+          No open files
+        </span>
+      ) : (
+        <div
+          className="flex min-w-0 flex-1 items-stretch overflow-x-auto"
+          role="tablist"
+          aria-label="Open files"
+        >
+          {openTabs.map((tab, index) => (
             <Tab
               key={tab.path}
               tab={tab}
@@ -55,9 +59,9 @@ export function TabBar() {
                 navigateTab(nextIndex);
               }}
             />
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
       <div className="flex shrink-0 items-center gap-0.5 border-l px-1">
         <button
           type="button"
