@@ -487,5 +487,50 @@ describe('EditorContext', () => {
       expect(result.current.saveError).toContain('disk full');
       expect(result.current.openTabs[0]?.isModified).toBe(true);
     });
+
+    it('clears a previous save failure when the file is reloaded', async () => {
+      readTextFile.mockResolvedValue('original');
+      writeTextFile.mockRejectedValue(new Error('disk full'));
+
+      const { result } = renderHook(() => useEditor(), { wrapper });
+
+      act(() => {
+        result.current.openFile('/home/test.ts', 'test.ts');
+      });
+
+      await waitFor(() => {
+        expect(result.current.fileStatus.get('/home/test.ts')?.kind).toBe(
+          'loaded',
+        );
+      });
+
+      act(() => {
+        result.current.updateFileContent('/home/test.ts', 'edited');
+        result.current.markModified('/home/test.ts', true);
+      });
+
+      await act(async () => {
+        await result.current.saveActiveFile();
+      });
+
+      expect(result.current.saveError).toContain('disk full');
+
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+      act(() => {
+        result.current.reloadActiveFile();
+      });
+
+      confirm.mockRestore();
+
+      await waitFor(() => {
+        expect(result.current.fileStatus.get('/home/test.ts')?.kind).toBe(
+          'loaded',
+        );
+      });
+
+      expect(result.current.saveError).toBeNull();
+      expect(result.current.openTabs[0]?.isModified).toBe(false);
+    });
   });
 });

@@ -232,7 +232,9 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     if (
       dirtyTabs.length > 0 &&
       !browserConfirm(
-        `${dirtyTabs.length} file${dirtyTabs.length === 1 ? '' : 's'} have unsaved changes. Close them and discard those changes?`,
+        dirtyTabs.length === 1
+          ? '1 file has unsaved changes. Close it and discard those changes?'
+          : `${dirtyTabs.length} files have unsaved changes. Close them and discard those changes?`,
       )
     ) {
       return false;
@@ -275,6 +277,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     }
 
     loadedRef.current.delete(activeFilePath);
+    setSaveFailure(null);
     setFileContents((prev) => withoutKey(prev, activeFilePath));
     setOpenTabs((prev) =>
       prev.map((tab) =>

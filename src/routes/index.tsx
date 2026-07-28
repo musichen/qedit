@@ -50,6 +50,9 @@ function EditorLayout() {
       if (!action) return;
 
       event.preventDefault();
+      // Handled here, so keep it away from Monaco and xterm keybindings that
+      // share the same chord (Cmd+Shift+O also opens Monaco's symbol picker).
+      event.stopPropagation();
 
       switch (action) {
         case 'open-file':
@@ -138,7 +141,9 @@ function EditorLayout() {
     const message = () => {
       const { dirtyTabCount: count } = dirtyStateRef.current;
 
-      return `${count} file${count === 1 ? '' : 's'} have unsaved changes. Exit qedit and discard them?`;
+      return count === 1
+        ? '1 file has unsaved changes. Exit qedit and discard it?'
+        : `${count} files have unsaved changes. Exit qedit and discard them?`;
     };
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       if (!dirtyStateRef.current.hasDirtyTabs) return;
