@@ -28,3 +28,16 @@ export const recentFiles = sqliteTable('recent_files', {
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+/**
+ * Recent workspace roots. The current client keeps this in memory until the
+ * native SQLite persistence layer is introduced.
+ */
+export const recentProjects = sqliteTable('recent_projects', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  projectPath: text('project_path').notNull().unique(),
+  displayName: text('display_name').notNull(),
+  lastOpenedAt: integer('last_opened_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});

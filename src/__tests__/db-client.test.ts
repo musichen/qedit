@@ -13,6 +13,12 @@ describe('db client', () => {
         db.removeRecentFile(f.filePath);
       }
     }
+    while (db.getRecentProjects(100).length > 0) {
+      const projects = db.getRecentProjects(100);
+      for (const project of projects) {
+        db.removeRecentProject(project.projectPath);
+      }
+    }
   });
 
   it('starts with an empty recent file list', () => {
@@ -70,5 +76,22 @@ describe('db client', () => {
 
     expect(db.getRecentFiles(5)).toHaveLength(5);
     expect(db.getRecentFiles(20)).toHaveLength(10);
+  });
+
+  it('tracks and deduplicates recent projects', () => {
+    const first = db.addRecentProject('/home/project-a', 'project-a');
+    db.addRecentProject('/home/project-b', 'project-b');
+    db.addRecentProject('/home/project-a', 'project-a');
+
+    expect(first.projectPath).toBe('/home/project-a');
+    expect(db.getRecentProjects()).toHaveLength(2);
+    expect(db.getRecentProjects()[0]?.projectPath).toBe('/home/project-a');
+  });
+
+  it('removes a recent project', () => {
+    db.addRecentProject('/home/project-a', 'project-a');
+    db.removeRecentProject('/home/project-a');
+
+    expect(db.getRecentProjects()).toHaveLength(0);
   });
 });
