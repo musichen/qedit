@@ -6,6 +6,10 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   envPrefix: ['VITE_'],
+  server: {
+    port: 3000,
+    strictPort: true,
+  },
   resolve: {
     tsconfigPaths: true,
   },

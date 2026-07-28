@@ -1,7 +1,6 @@
 packages:
-  - apps/*
   - packages/**
-  - tooling/*
+  - tooling/**
 allowBuilds:
   '@parcel/watcher': true
   '@swc/core': true
@@ -39,7 +38,6 @@ catalog:
   class-variance-authority: ^0.7.1
   clsx: ^2.1.1
   cmdk: ^1.1.1
-  cross-env: ^10.1.0
   drizzle-kit: ^0.31.6
   drizzle-orm: ^0.44.7
   embla-carousel-react: ^8.6.0

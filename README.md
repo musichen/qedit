@@ -23,4 +23,9 @@ persisted across restarts.
 
 ## Development
 
-See `AGENTS.md` for the command reference and architecture notes.
+The desktop app is intentionally root-oriented: frontend code is in `src/`, and
+Tauri code/configuration is in `src-tauri/`. Run `pnpm run tauri:dev` for the
+desktop shell, `pnpm run check` for the fast validation pipeline, and
+`pnpm run verify` for a native build plus smoke launch.
+
+See `AGENTS.md` for the full command reference and architecture notes.

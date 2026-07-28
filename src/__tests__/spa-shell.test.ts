@@ -8,10 +8,14 @@ import { fileURLToPath } from 'node:url';
 // hydrate if the build emits a prerendered SPA shell carrying the router
 // bootstrap payload. A hand-written index.html has no bootstrap and boots to a
 // blank page, so guard both halves of that contract here.
-const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const viteConfig = readFileSync(join(webRoot, 'vite.config.ts'), 'utf-8');
+const projectRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const viteConfig = readFileSync(join(projectRoot, 'vite.config.ts'), 'utf-8');
 
 describe('Tauri static client build', () => {
+  it('uses the Tauri development server port', () => {
+    expect(viteConfig).toMatch(/server:\s*{\s*port:\s*3000/);
+  });
+
   it('enables TanStack Start SPA mode', () => {
     expect(viteConfig).toMatch(/spa:\s*{\s*enabled:\s*true/);
   });
@@ -29,7 +33,7 @@ describe('Tauri static client build', () => {
 describe('client entry', () => {
   it('hydrates the prerendered document with StartClient', () => {
     const clientEntry = readFileSync(
-      join(webRoot, 'src', 'client.tsx'),
+      join(projectRoot, 'src', 'client.tsx'),
       'utf-8',
     );
 
