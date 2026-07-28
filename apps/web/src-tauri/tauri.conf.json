@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "dev.qedit.app",
   "build": {
-    "frontendDist": "../dist",
+    "frontendDist": "../dist/client",
     "devUrl": "http://localhost:3000",
     "beforeDevCommand": "pnpm dev",
     "beforeBuildCommand": "pnpm build"
