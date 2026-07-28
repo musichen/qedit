@@ -20,7 +20,7 @@ fi
 # --- Run full check pipeline ---
 echo ""
 echo "=== Running check pipeline ==="
-pnpm run check
+pnpm run verify
 
 # --- Build for all platforms ---
 echo ""

@@ -30,6 +30,15 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 | `cd apps/web && pnpm tauri build` | Full Tauri desktop build (Rust + frontend) |
 | `pnpm run db:generate` | drizzle-kit generate migrations |
 
+### Check & verify pipeline
+
+| Command | Scope |
+|---|---|
+| `pnpm run check` | Fast CI — lint, format, typecheck, tests, Vite build, + Rust compilation check |
+| `pnpm run check:native` | Rust-only: `cargo check` on the Tauri workspace (catches broken plugin configs, JSON errors, compilation failures without a full build) |
+| `pnpm run build:native` | Full Tauri native build (app bundle only, no DMG/installer) |
+| `pnpm run verify` | Full pipeline: `check` + native build + smoke launch test (runs the binary for 3s, kills it, fails if it panics) |
+
 ## Constraints
 
 - TypeScript strict mode throughout (`strict: true`, `noUnusedLocals`, `noUnusedParameters`).
