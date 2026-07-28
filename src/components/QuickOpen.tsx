@@ -3,10 +3,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useWorkspace } from './WorkspaceContext';
 
-import { basenameFromPath } from '#/lib/workspace-bridge';
+import { dirnameFromPath } from '#/lib/workspace-bridge';
 
 export function QuickOpen({ onClose }: { onClose: () => void }) {
-  const { knownFiles, recentFiles, openRecentFile } = useWorkspace();
+  const { knownFiles, recentFiles, openWorkspaceFile } = useWorkspace();
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
 
@@ -40,10 +40,10 @@ export function QuickOpen({ onClose }: { onClose: () => void }) {
 
   const handleSelect = useCallback(
     (path: string, name: string) => {
-      void openRecentFile(path, name);
+      void openWorkspaceFile(path, name);
       onClose();
     },
-    [openRecentFile, onClose],
+    [openWorkspaceFile, onClose],
   );
 
   return (
@@ -90,6 +90,7 @@ export function QuickOpen({ onClose }: { onClose: () => void }) {
                 type="button"
                 className="flex w-full min-w-0 items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-muted"
                 onClick={() => handleSelect(entry.path, entry.name)}
+                title={entry.path}
                 role="option"
                 aria-selected={false}
               >
@@ -100,7 +101,7 @@ export function QuickOpen({ onClose }: { onClose: () => void }) {
                 )}
                 <span className="truncate">{entry.name}</span>
                 <span className="ml-auto shrink-0 truncate text-[11px] text-muted-foreground">
-                  {basenameFromPath(entry.path)}
+                  {dirnameFromPath(entry.path)}
                 </span>
               </button>
             ))

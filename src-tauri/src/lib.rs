@@ -4,18 +4,27 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
+use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
-use tauri::{Emitter, State};
+use tauri::{Emitter, Manager, RunEvent, State};
 
 type SharedMaster = Arc<Mutex<Box<dyn MasterPty + Send>>>;
-type SharedChild = Arc<Mutex<Box<dyn Child + Send>>>;
+type SharedWriter = Arc<Mutex<Box<dyn Write + Send>>>;
+type SharedKiller = Arc<Mutex<Box<dyn ChildKiller + Send + Sync>>>;
 type SharedTerminalState = Arc<Mutex<TerminalState>>;
 
 struct TerminalSession {
     master: SharedMaster,
-    child: SharedChild,
-    writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    killer: SharedKiller,
+    writer: SharedWriter,
+}
+
+impl TerminalSession {
+    fn kill(&self) {
+        if let Ok(mut killer) = self.killer.lock() {
+            let _ = killer.kill();
+        }
+    }
 }
 
 struct TerminalState {
@@ -98,7 +107,7 @@ fn terminal_spawn(
         .map_err(|error| format!("Could not create terminal: {error}"))?;
     let mut command = CommandBuilder::new(shell);
     command.cwd(cwd);
-    let child = pty
+    let mut child = pty
         .slave
         .spawn_command(command)
         .map_err(|error| format!("Could not start terminal process: {error}"))?;
@@ -115,7 +124,7 @@ fn terminal_spawn(
         .map_err(|_| "Terminal master lock was poisoned".to_string())?
         .take_writer()
         .map_err(|error| format!("Could not write to terminal: {error}"))?;
-    let child: SharedChild = Arc::new(Mutex::new(child));
+    let killer: SharedKiller = Arc::new(Mutex::new(child.clone_killer()));
 
     let session_id = {
         let mut terminals = state
@@ -127,7 +136,7 @@ fn terminal_spawn(
             id,
             TerminalSession {
                 master: Arc::clone(&master),
-                child: Arc::clone(&child),
+                killer,
                 writer: Arc::new(Mutex::new(writer)),
             },
         );
@@ -138,17 +147,20 @@ fn terminal_spawn(
     thread::spawn(move || {
         let mut reader = reader;
         let mut buffer = [0_u8; 8192];
+        let mut pending: Vec<u8> = Vec::new();
         loop {
             match reader.read(&mut buffer) {
                 Ok(0) | Err(_) => break,
                 Ok(size) => {
-                    let _ = output_app.emit(
-                        "terminal://output",
-                        TerminalOutput {
-                            session_id,
-                            data: String::from_utf8_lossy(&buffer[..size]).into_owned(),
-                        },
-                    );
+                    pending.extend_from_slice(&buffer[..size]);
+                    let data = take_decodable_prefix(&mut pending);
+
+                    if data.is_empty() {
+                        continue;
+                    }
+
+                    let _ =
+                        output_app.emit("terminal://output", TerminalOutput { session_id, data });
                 }
             }
         }
@@ -157,11 +169,7 @@ fn terminal_spawn(
     let exit_app = app.clone();
     let exit_state = Arc::clone(state.inner());
     thread::spawn(move || {
-        let code = child
-            .lock()
-            .ok()
-            .and_then(|mut process| process.wait().ok())
-            .map(|status| status.exit_code());
+        let code = child.wait().ok().map(|status| status.exit_code());
         if let Ok(mut terminals) = exit_state.lock() {
             terminals.sessions.remove(&session_id);
         }
@@ -171,21 +179,66 @@ fn terminal_spawn(
     Ok(session_id)
 }
 
+/// Decode every complete UTF-8 sequence buffered so far, leaving an incomplete
+/// trailing sequence in `pending` so it can be joined with the next PTY read.
+fn take_decodable_prefix(pending: &mut Vec<u8>) -> String {
+    let mut decoded = String::new();
+
+    loop {
+        match std::str::from_utf8(pending) {
+            Ok(text) => {
+                decoded.push_str(text);
+                pending.clear();
+
+                return decoded;
+            }
+            Err(error) => {
+                let valid = error.valid_up_to();
+
+                if let Ok(text) = std::str::from_utf8(&pending[..valid]) {
+                    decoded.push_str(text);
+                }
+
+                match error.error_len() {
+                    None => {
+                        pending.drain(..valid);
+
+                        return decoded;
+                    }
+                    Some(invalid) => {
+                        decoded.push(char::REPLACEMENT_CHARACTER);
+                        pending.drain(..valid + invalid);
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn session_handle<T>(
+    state: &State<'_, SharedTerminalState>,
+    session_id: u32,
+    select: impl Fn(&TerminalSession) -> T,
+) -> Result<T, String> {
+    let terminals = state
+        .lock()
+        .map_err(|_| "Terminal state lock was poisoned".to_string())?;
+
+    terminals
+        .sessions
+        .get(&session_id)
+        .map(select)
+        .ok_or_else(|| "Terminal session is closed".to_string())
+}
+
 #[tauri::command]
 fn terminal_write(
     state: State<'_, SharedTerminalState>,
     session_id: u32,
     data: String,
 ) -> Result<(), String> {
-    let terminals = state
-        .lock()
-        .map_err(|_| "Terminal state lock was poisoned".to_string())?;
-    let session = terminals
-        .sessions
-        .get(&session_id)
-        .ok_or_else(|| "Terminal session is closed".to_string())?;
-    let mut writer = session
-        .writer
+    let shared_writer = session_handle(&state, session_id, |session| Arc::clone(&session.writer))?;
+    let mut writer = shared_writer
         .lock()
         .map_err(|_| "Terminal writer lock was poisoned".to_string())?;
     writer
@@ -201,55 +254,71 @@ fn terminal_resize(
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
-    let terminals = state
+    let shared_master = session_handle(&state, session_id, |session| Arc::clone(&session.master))?;
+
+    let master = shared_master
         .lock()
-        .map_err(|_| "Terminal state lock was poisoned".to_string())?;
-    let session = terminals
-        .sessions
-        .get(&session_id)
-        .ok_or_else(|| "Terminal session is closed".to_string())?;
-    let result = session
-        .master
-        .lock()
-        .map_err(|_| "Terminal master lock was poisoned".to_string())?
+        .map_err(|_| "Terminal master lock was poisoned".to_string())?;
+
+    master
         .resize(PtySize {
             rows: rows.max(2),
             cols: cols.max(20),
             pixel_width: 0,
             pixel_height: 0,
         })
-        .map_err(|error| format!("Could not resize terminal: {error}"));
-    result
+        .map_err(|error| format!("Could not resize terminal: {error}"))
 }
 
 #[tauri::command]
 fn terminal_close(state: State<'_, SharedTerminalState>, session_id: u32) -> Result<(), String> {
-    let mut terminals = state
-        .lock()
-        .map_err(|_| "Terminal state lock was poisoned".to_string())?;
-    if let Some(session) = terminals.sessions.remove(&session_id) {
-        let _ = session
-            .child
+    let session = {
+        let mut terminals = state
             .lock()
-            .map_err(|_| "Terminal child lock was poisoned".to_string())?
-            .kill();
+            .map_err(|_| "Terminal state lock was poisoned".to_string())?;
+
+        terminals.sessions.remove(&session_id)
+    };
+
+    // Dropping the session releases the master PTY and its writer, so the shell
+    // sees EOF/SIGHUP even if the kill signal does not reach it.
+    if let Some(session) = session {
+        session.kill();
     }
+
     Ok(())
+}
+
+fn kill_all_terminals(state: &SharedTerminalState) {
+    let sessions = match state.lock() {
+        Ok(mut terminals) => terminals.sessions.drain().collect::<Vec<_>>(),
+        Err(_) => return,
+    };
+
+    for (_, session) in sessions {
+        session.kill();
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
-        .manage(Arc::new(Mutex::new(TerminalState::default())))
+        .manage(Arc::new(Mutex::new(TerminalState::default())) as SharedTerminalState)
         .invoke_handler(tauri::generate_handler![
             terminal_spawn,
             terminal_write,
             terminal_resize,
             terminal_close
         ])
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())
         .expect("error while running tauri application");
+
+    app.run(|handle, event| {
+        if matches!(event, RunEvent::Exit) {
+            kill_all_terminals(&handle.state::<SharedTerminalState>());
+        }
+    });
 }

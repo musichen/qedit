@@ -2,7 +2,7 @@ import { Clock3, FilePlus2, FolderPlus, Sparkles } from 'lucide-react';
 
 import { useWorkspace } from './WorkspaceContext';
 
-import { basenameFromPath } from '#/lib/workspace-bridge';
+import { dirnameFromPath } from '#/lib/workspace-bridge';
 
 export function EmptyState() {
   const {
@@ -11,7 +11,7 @@ export function EmptyState() {
     recentProjects,
     openFileDialog,
     openFolderDialog,
-    openRecentFile,
+    openWorkspaceFile,
     openRecentProject,
   } = useWorkspace();
 
@@ -95,12 +95,13 @@ export function EmptyState() {
                 key={file.filePath}
                 className="flex items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-muted"
                 onClick={() =>
-                  void openRecentFile(file.filePath, file.displayName)
+                  void openWorkspaceFile(file.filePath, file.displayName)
                 }
+                title={file.filePath}
               >
                 <span className="truncate font-medium">{file.displayName}</span>
                 <span className="ml-3 truncate text-xs text-muted-foreground">
-                  {basenameFromPath(file.filePath)}
+                  {dirnameFromPath(file.filePath)}
                 </span>
               </button>
             ))}

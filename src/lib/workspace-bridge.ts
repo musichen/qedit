@@ -234,3 +234,14 @@ export function basenameFromPath(path: string): string {
 
   return normalized.split('/').pop() || normalized;
 }
+
+/** Containing directory of a path, used as the secondary label next to a filename. */
+export function dirnameFromPath(path: string): string {
+  const normalized = path.replaceAll('\\', '/').replace(/\/+$/, '');
+  const separator = normalized.lastIndexOf('/');
+
+  if (separator < 0) return '';
+  if (separator === 0) return '/';
+
+  return normalized.slice(0, separator);
+}

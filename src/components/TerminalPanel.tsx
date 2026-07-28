@@ -14,6 +14,10 @@ import {
 
 import '@xterm/xterm/css/xterm.css';
 
+type TerminalEvent =
+  | { kind: 'output'; data: string }
+  | { kind: 'exit'; code: number | null };
+
 export function TerminalPanel() {
   const { workspaceRoot } = useWorkspace();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -23,9 +27,11 @@ export function TerminalPanel() {
 
   useEffect(() => {
     let disposed = false;
-    let cleanupOutput = () => {};
-    let cleanupExit = () => {};
-    let disposeTerminal = () => {};
+    const disposers: Array<() => void> = [];
+
+    const runDisposers = () => {
+      while (disposers.length > 0) disposers.pop()?.();
+    };
 
     async function start() {
       if (!containerRef.current) return;
@@ -51,37 +57,85 @@ export function TerminalPanel() {
         terminal.open(containerRef.current);
         fit.fit();
         terminalRef.current = terminal;
-        disposeTerminal = () => terminal.dispose();
+        disposers.push(() => terminal.dispose());
 
         const cwd = workspaceRoot ?? (await getHomeForTerminal());
-        if (!cwd || disposed) {
+        if (disposed) {
+          runDisposers();
+          return;
+        }
+        if (!cwd) {
           setError('Open a folder to start a project terminal.');
           return;
         }
 
-        cleanupOutput = await listenTerminalOutput(
-          ({ sessionId: id, data }) => {
-            if (id === sessionRef.current) terminal.write(data);
-          },
-        );
-        cleanupExit = await listenTerminalExit(({ sessionId: id, code }) => {
-          if (id === sessionRef.current) {
-            terminal.write(
-              `\r\n[process exited${code === null ? '' : ` with code ${code}`} ]\r\n`,
-            );
-            sessionRef.current = null;
+        // The PTY reader starts emitting the moment the session is registered,
+        // which can be before spawnTerminal() resolves with its id. Buffer per
+        // session id so the first prompt is replayed instead of dropped.
+        let ownSessionId: number | null = null;
+        const buffered = new Map<number, TerminalEvent[]>();
+
+        const applyEvent = (event: TerminalEvent) => {
+          if (event.kind === 'output') {
+            terminal.write(event.data);
+
+            return;
           }
-        });
+
+          terminal.write(
+            `\r\n[process exited${event.code === null ? '' : ` with code ${event.code}`} ]\r\n`,
+          );
+          sessionRef.current = null;
+        };
+
+        const routeEvent = (id: number, event: TerminalEvent) => {
+          if (ownSessionId === null) {
+            const queue = buffered.get(id);
+
+            if (queue) queue.push(event);
+            else buffered.set(id, [event]);
+
+            return;
+          }
+
+          if (id === ownSessionId) applyEvent(event);
+        };
+
+        const cleanupOutput = await listenTerminalOutput(
+          ({ sessionId: id, data }) => routeEvent(id, { kind: 'output', data }),
+        );
+        disposers.push(cleanupOutput);
+        if (disposed) {
+          runDisposers();
+          return;
+        }
+
+        const cleanupExit = await listenTerminalExit(
+          ({ sessionId: id, code }) => routeEvent(id, { kind: 'exit', code }),
+        );
+        disposers.push(cleanupExit);
+        if (disposed) {
+          runDisposers();
+          return;
+        }
+
         const sessionId = await spawnTerminal(
           cwd,
           terminal.cols,
           terminal.rows,
         );
         if (disposed) {
+          runDisposers();
           await closeTerminal(sessionId);
           return;
         }
+
+        const replay = buffered.get(sessionId) ?? [];
+        buffered.clear();
+        ownSessionId = sessionId;
         sessionRef.current = sessionId;
+        for (const event of replay) applyEvent(event);
+
         terminal.onData((data) => {
           void writeTerminal(sessionId, data).catch((cause: unknown) =>
             setError(cause instanceof Error ? cause.message : String(cause)),
@@ -94,10 +148,7 @@ export function TerminalPanel() {
           );
         };
         window.addEventListener('resize', resize);
-        disposeTerminal = () => {
-          window.removeEventListener('resize', resize);
-          terminal.dispose();
-        };
+        disposers.push(() => window.removeEventListener('resize', resize));
       } catch (cause) {
         if (!disposed) {
           setError(cause instanceof Error ? cause.message : String(cause));
@@ -109,9 +160,7 @@ export function TerminalPanel() {
 
     return () => {
       disposed = true;
-      cleanupOutput();
-      cleanupExit();
-      disposeTerminal();
+      runDisposers();
       const sessionId = sessionRef.current;
       sessionRef.current = null;
       if (sessionId !== null) void closeTerminal(sessionId);

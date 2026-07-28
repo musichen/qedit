@@ -7,8 +7,19 @@ export type ShortcutAction =
   | 'quick-open'
   | 'find';
 
+/**
+ * Monaco keeps focus on a hidden `<textarea class="inputarea">`, so a naive
+ * text-field guard would disable every workspace shortcut while the user is
+ * editing. Editing inside Monaco is the primary flow and its shortcuts are
+ * owned by qedit, so the editor is explicitly not treated as a text field.
+ */
+function isMonacoTarget(target: Element): boolean {
+  return target.closest('.monaco-editor') !== null;
+}
+
 function isTextEditingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
+  if (isMonacoTarget(target)) return false;
 
   const isEditable = (element: Element): boolean =>
     element.matches('input, textarea') ||

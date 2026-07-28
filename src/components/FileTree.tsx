@@ -22,7 +22,7 @@ import {
 } from '#/lib/workspace-bridge';
 
 export function FileTree() {
-  const { activeFilePath, openFile } = useEditor();
+  const { activeFilePath } = useEditor();
   const {
     workspaceRoot,
     rootEntries,
@@ -32,17 +32,17 @@ export function FileTree() {
     error,
     openFileDialog,
     openFolderDialog,
-    openRecentFile,
+    openWorkspaceFile,
     openRecentProject,
     registerEntries,
     retryWorkspace,
   } = useWorkspace();
 
-  const handleOpenRecentFile = useCallback(
+  const handleOpenFile = useCallback(
     (filePath: string, displayName: string) => {
-      void openRecentFile(filePath, displayName);
+      void openWorkspaceFile(filePath, displayName);
     },
-    [openRecentFile],
+    [openWorkspaceFile],
   );
 
   return (
@@ -127,7 +127,7 @@ export function FileTree() {
                       : 'text-muted-foreground'
                   }`}
                   onClick={() =>
-                    handleOpenRecentFile(file.filePath, file.displayName)
+                    handleOpenFile(file.filePath, file.displayName)
                   }
                   title={file.filePath}
                 >
@@ -185,7 +185,7 @@ export function FileTree() {
                     entry={entry}
                     depth={0}
                     activeFilePath={activeFilePath}
-                    onOpenFile={openFile}
+                    onOpenFile={handleOpenFile}
                     onEntriesLoaded={registerEntries}
                   />
                 ))}

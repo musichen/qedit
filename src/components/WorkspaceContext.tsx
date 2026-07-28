@@ -37,7 +37,8 @@ interface WorkspaceContextValue {
   error: string | null;
   openFileDialog: () => Promise<void>;
   openFolderDialog: () => Promise<void>;
-  openRecentFile: (filePath: string, displayName?: string) => Promise<void>;
+  /** The single seam every file open goes through, so Recent stays in sync. */
+  openWorkspaceFile: (filePath: string, displayName?: string) => Promise<void>;
   openRecentProject: (projectPath: string) => Promise<void>;
   registerEntries: (entries: WorkspaceEntry[]) => void;
   retryWorkspace: () => void;
@@ -131,7 +132,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
   }, [closeAllTabs, loadWorkspace, refreshRecent]);
 
-  const openRecentFile = useCallback(
+  const openWorkspaceFile = useCallback(
     async (filePath: string, displayName?: string) => {
       setError(null);
 
@@ -191,7 +192,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       error,
       openFileDialog,
       openFolderDialog,
-      openRecentFile,
+      openWorkspaceFile,
       openRecentProject,
       registerEntries,
       retryWorkspace,
@@ -206,7 +207,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       error,
       openFileDialog,
       openFolderDialog,
-      openRecentFile,
+      openWorkspaceFile,
       openRecentProject,
       registerEntries,
       retryWorkspace,
