@@ -20,11 +20,16 @@ export interface OpenTab {
   isModified: boolean;
 }
 
+export type FileStatus =
+  | { kind: 'loading' }
+  | { kind: 'loaded' }
+  | { kind: 'error'; message: string };
+
 interface EditorContextValue {
   openTabs: OpenTab[];
   activeFilePath: string | null;
   fileContents: Map<string, string>;
-  fileErrors: Map<string, string>;
+  fileStatus: Map<string, FileStatus>;
   cursorPosition: CursorPosition;
   indentation: number;
   language: string;
@@ -111,32 +116,43 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   const [fileContents, setFileContents] = useState<Map<string, string>>(
     new Map(),
   );
-  const [fileErrors, setFileErrors] = useState<Map<string, string>>(new Map());
+  const [fileStatus, setFileStatus] = useState<Map<string, FileStatus>>(
+    new Map(),
+  );
   const [cursorPosition, setCursorPosition] = useState<CursorPosition>({
     line: 1,
     column: 1,
   });
   const [language, setLanguage] = useState('typescript');
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  // Track which paths have already been loaded to avoid double-fetches
+  const [saveFailure, setSaveFailure] = useState<{
+    path: string;
+    message: string;
+  } | null>(null);
+  // Track which paths have already been requested to avoid double-fetches
   const loadedRef = useRef<Set<string>>(new Set());
 
   const loadFile = useCallback((path: string) => {
     if (loadedRef.current.has(path)) return;
 
     loadedRef.current.add(path);
+    setFileStatus((prev) => new Map(prev).set(path, { kind: 'loading' }));
 
     void readFileContent(path).then(
       (content) => {
         setFileContents((prev) => new Map(prev).set(path, content));
-        setFileErrors((prev) => withoutKey(prev, path));
+        setFileStatus((prev) => new Map(prev).set(path, { kind: 'loaded' }));
       },
       (error: unknown) => {
         // Keep no content cached: an unread buffer must never be savable.
         loadedRef.current.delete(path);
         setFileContents((prev) => withoutKey(prev, path));
-        setFileErrors((prev) => new Map(prev).set(path, errorMessage(error)));
+        setFileStatus((prev) =>
+          new Map(prev).set(path, {
+            kind: 'error',
+            message: errorMessage(error),
+          }),
+        );
       },
     );
   }, []);
@@ -172,10 +188,13 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
       setOpenTabs(remaining);
 
-      // Drop the cached buffer so reopening re-reads from disk
-      loadedRef.current.delete(path);
-      setFileContents((prev) => withoutKey(prev, path));
-      setFileErrors((prev) => withoutKey(prev, path));
+      // Drop clean buffers so reopening re-reads from disk; modified buffers
+      // are kept so unsaved edits survive a close.
+      if (!openTabs[closedIdx]?.isModified) {
+        loadedRef.current.delete(path);
+        setFileContents((prev) => withoutKey(prev, path));
+        setFileStatus((prev) => withoutKey(prev, path));
+      }
 
       if (path !== activeFilePath) return;
 
@@ -212,17 +231,29 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  const updateFileContent = useCallback((path: string, content: string) => {
-    setFileContents((prev) => new Map(prev).set(path, content));
-  }, []);
+  const updateFileContent = useCallback(
+    (path: string, content: string) => {
+      // Never let an edit populate a buffer whose read has not completed
+      if (fileStatus.get(path)?.kind !== 'loaded') return;
+
+      setFileContents((prev) => new Map(prev).set(path, content));
+    },
+    [fileStatus],
+  );
 
   const saveActiveFile = useCallback(async () => {
     if (!activeFilePath) return;
 
-    if (fileErrors.has(activeFilePath)) {
-      setSaveError(
-        `Refusing to save ${activeFilePath}: the file was never read successfully`,
-      );
+    const status = fileStatus.get(activeFilePath);
+
+    if (status?.kind !== 'loaded') {
+      setSaveFailure({
+        path: activeFilePath,
+        message:
+          status?.kind === 'error'
+            ? `Refusing to save ${activeFilePath}: the file was never read successfully`
+            : `Refusing to save ${activeFilePath}: still loading`,
+      });
 
       return;
     }
@@ -232,25 +263,31 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     if (content === undefined) return;
 
     setSaving(true);
-    setSaveError(null);
+    setSaveFailure(null);
 
     try {
       await writeFileContent(activeFilePath, content);
       markModified(activeFilePath, false);
     } catch (error) {
       // Keep the modified state so the buffer is not presumed persisted
-      setSaveError(errorMessage(error));
+      setSaveFailure({ path: activeFilePath, message: errorMessage(error) });
     } finally {
       setSaving(false);
     }
-  }, [activeFilePath, fileContents, fileErrors, markModified]);
+  }, [activeFilePath, fileContents, fileStatus, markModified]);
+
+  // Scope the save error to the file it belongs to
+  const saveError =
+    saveFailure && saveFailure.path === activeFilePath
+      ? saveFailure.message
+      : null;
 
   const value = useMemo<EditorContextValue>(
     () => ({
       openTabs,
       activeFilePath,
       fileContents,
-      fileErrors,
+      fileStatus,
       cursorPosition,
       indentation: 2,
       language,
@@ -270,7 +307,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       openTabs,
       activeFilePath,
       fileContents,
-      fileErrors,
+      fileStatus,
       cursorPosition,
       language,
       saving,

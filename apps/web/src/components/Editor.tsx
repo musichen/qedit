@@ -21,7 +21,7 @@ export function Editor() {
     language,
     activeFilePath,
     fileContents,
-    fileErrors,
+    fileStatus,
     setCursorPosition,
     markModified,
     updateFileContent,
@@ -73,15 +73,17 @@ export function Editor() {
     [activeFilePath, markModified, updateFileContent],
   );
 
-  const readError = activeFilePath ? fileErrors.get(activeFilePath) : undefined;
+  const status = activeFilePath ? fileStatus.get(activeFilePath) : undefined;
 
-  if (readError && activeFilePath) {
+  if (activeFilePath && status?.kind === 'error') {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 bg-background p-6 text-center">
         <p className="text-sm font-medium text-destructive">
           Could not open {activeFilePath}
         </p>
-        <p className="max-w-lg text-xs text-muted-foreground">{readError}</p>
+        <p className="max-w-lg text-xs text-muted-foreground">
+          {status.message}
+        </p>
       </div>
     );
   }
@@ -94,11 +96,22 @@ export function Editor() {
     );
   }
 
+  // Never mount Monaco over a file whose read has not completed: the fallback
+  // content must not be editable into an unread buffer.
+  if (activeFilePath && status?.kind !== 'loaded') {
+    return (
+      <div className="flex h-full items-center justify-center bg-background">
+        <span className="text-xs text-muted-foreground">
+          Loading {activeFilePath}…
+        </span>
+      </div>
+    );
+  }
+
   // Determine what value to show in Monaco
-  const currentValue =
-    activeFilePath && fileContents.has(activeFilePath)
-      ? (fileContents.get(activeFilePath) ?? '')
-      : DEFAULT_CODE;
+  const currentValue = activeFilePath
+    ? (fileContents.get(activeFilePath) ?? '')
+    : DEFAULT_CODE;
 
   return (
     <MonacoEditor
