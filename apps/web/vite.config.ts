@@ -5,11 +5,10 @@ import viteReact from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
 import { writeFileSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const clientOutDir = resolve(__dirname, 'dist/client');
 
 export default defineConfig({
   envPrefix: ['VITE_'],
@@ -31,9 +30,16 @@ export default defineConfig({
     {
       name: 'generate-index-html',
       apply: 'build',
+      // Only the client build produces the HTML the Tauri webview loads
+      applyToEnvironment: (environment) => environment.name === 'client',
       writeBundle(options, bundle) {
-        // Only the client build produces the HTML the Tauri webview loads
-        if (!options.dir || resolve(options.dir) !== clientOutDir) return;
+        const outDir = options.dir;
+
+        if (!outDir) {
+          this.error(
+            'generate-index-html: the client build produced no output directory, so index.html cannot be emitted for Tauri.',
+          );
+        }
 
         const entryChunks = Object.values(bundle).filter(
           (output) => output.type === 'chunk' && output.isEntry,
@@ -61,8 +67,9 @@ export default defineConfig({
             `<div id="root"></div>\n  ${jsScript}`,
           );
 
-        writeFileSync(join(clientOutDir, 'index.html'), html);
-        console.log('✓ Generated dist/client/index.html for Tauri');
+        const htmlPath = join(outDir, 'index.html');
+        writeFileSync(htmlPath, html);
+        console.log(`✓ Generated ${htmlPath} for Tauri`);
       },
     },
   ],
