@@ -14,10 +14,26 @@ describe('Tauri app icon', () => {
     expect(existsSync(join(tauriRoot, 'icons', 'icon.png'))).toBe(true);
   });
 
-  it('keeps the centered artwork source used to regenerate platform icons', () => {
-    expect(
-      existsSync(join(tauriRoot, 'icons', 'qedit_logo_centered.png')),
-    ).toBe(true);
-    expect(existsSync(join(tauriRoot, 'icons', 'qedit_logo.svg'))).toBe(true);
+  it('uses the vector source and keeps the complete generated icon set', () => {
+    const iconRoot = join(tauriRoot, 'icons');
+    const generatedIcons = [
+      '32x32.png',
+      '64x64.png',
+      '128x128.png',
+      '128x128@2x.png',
+      'icon.png',
+      'icon.icns',
+      'icon.ico',
+      'StoreLogo.png',
+      'Square30x30Logo.png',
+      'ios/AppIcon-512@2x.png',
+      'android/mipmap-xxxhdpi/ic_launcher.png',
+    ];
+
+    expect(existsSync(join(iconRoot, 'qedit_logo.svg'))).toBe(true);
+    expect(existsSync(join(iconRoot, 'qedit_logo_centered.png'))).toBe(false);
+    for (const icon of generatedIcons) {
+      expect(existsSync(join(iconRoot, icon))).toBe(true);
+    }
   });
 });
