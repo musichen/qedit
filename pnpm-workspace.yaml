@@ -26,6 +26,7 @@ catalog:
   '@tanstack/router-cli': ^1.167.21
   '@tanstack/router-plugin': ^1.168.23
   '@tauri-apps/api': ^2.0.0
+  '@tauri-apps/cli': ^2.0.0
   '@tauri-apps/plugin-dialog': ^2.0.0
   '@tauri-apps/plugin-fs': ^2.0.0
   '@tauri-apps/plugin-shell': ^2.0.0

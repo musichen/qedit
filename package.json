@@ -8,6 +8,9 @@
     "turbo": "turbo",
     "build": "turbo build --cache-dir=.turbo",
     "dev": "cross-env FORCE_COLOR=1 turbo dev --parallel",
+    "check": "pnpm run lint && pnpm run format && pnpm run typecheck && pnpm run test && pnpm run build",
+    "dev:web": "pnpm --filter @qedit/web dev",
+    "tauri:dev": "pnpm --filter @qedit/web tauri dev",
     "format": "oxfmt --check",
     "format:fix": "oxfmt",
     "lint": "oxlint",
@@ -15,8 +18,14 @@
     "typecheck": "turbo typecheck --cache-dir=.turbo",
     "test": "turbo test:unit --cache-dir=.turbo",
     "test:unit": "turbo test:unit --cache-dir=.turbo",
+    "build:mac": "rustup target add aarch64-apple-darwin x86_64-apple-darwin 2>/dev/null; pnpm --filter @qedit/web tauri build --bundles dmg",
+    "build:linux": "rustup target add x86_64-unknown-linux-gnu 2>/dev/null; pnpm --filter @qedit/web tauri build --bundles deb",
+    "build:win": "rustup target add x86_64-pc-windows-msvc 2>/dev/null; pnpm --filter @qedit/web tauri build --bundles msi",
+    "build:all": "pnpm run build:mac && pnpm run build:linux && pnpm run build:win",
     "db:generate": "pnpm --filter @qedit/db generate",
-    "db:migrate": "pnpm --filter @qedit/db migrate"
+    "db:migrate": "pnpm --filter @qedit/db migrate",
+    "release": "bash scripts/release.sh",
+    "release:dry": "DRY_RUN=1 bash scripts/release.sh"
   },
   "devDependencies": {
     "@types/node": "catalog:",
