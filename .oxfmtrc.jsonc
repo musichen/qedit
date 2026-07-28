@@ -11,5 +11,13 @@
     "newlinesBetween": true,
     "order": "asc",
   },
-  "ignorePatterns": ["node_modules", "dist", "*.md", "routeTree.gen.ts"],
+  // src-tauri/gen is regenerated (minified) by the Tauri CLI on every build,
+  // so formatting it would leave the tree dirty after `check:native`.
+  "ignorePatterns": [
+    "node_modules",
+    "dist",
+    "*.md",
+    "routeTree.gen.ts",
+    "**/src-tauri/gen/**",
+  ],
 }

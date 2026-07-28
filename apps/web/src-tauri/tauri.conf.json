@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/nicegui-org/nicegui-1.4/main/nicegui/static/tauri-conf-schema.json",
+  "$schema": "https://schema.tauri.app/config/2",
   "productName": "qedit",
   "version": "0.1.0",
   "identifier": "dev.qedit.app",

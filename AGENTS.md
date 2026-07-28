@@ -7,8 +7,10 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 ## Architecture
 
 - **Monorepo**: pnpm workspaces + Turbo (`turbo.json`, `pnpm-workspace.yaml`). Packages under `apps/*`, `packages/**`, `tooling/*`.
-- **Frontend**: `apps/web` — TanStack Start (React + Vite + SSR router). See `apps/web/src/router.tsx` for route setup, `apps/web/vite.config.ts` for plugins.
+- **Frontend**: `apps/web` — TanStack Start (React + Vite router). See `apps/web/src/router.tsx` for route setup, `apps/web/vite.config.ts` for plugins.
 - **Desktop shell**: Tauri 2 in `apps/web/src-tauri/`. Plugins: `fs` (scope `$HOME/**`), `shell` (open), `dialog`. Config at `tauri.conf.json`, capabilities at `capabilities/default.json`.
+- **Static shell invariant**: Tauri loads `dist/client` as plain static files with no SSR server, so the build must emit a prerendered SPA shell at `dist/client/index.html` carrying the router bootstrap payload (`spa.prerender.outputPath: '/index'` in `vite.config.ts`). A hand-written or hand-generated `index.html` has no bootstrap payload and boots the app to a blank page, so there is deliberately no source `apps/web/index.html` — the document markup lives in `src/routes/__root.tsx`. Guarded by `apps/web/src/__tests__/spa-shell.test.ts`.
+- **Generated Tauri files**: `apps/web/src-tauri/gen/**` is regenerated (minified) by the Tauri CLI on every build and is excluded from oxfmt — never hand-format or hand-edit it.
 - **Database**: `packages/db` — Drizzle ORM + SQLite schema in `src/schema.ts` (`sessions`, `recent_files`), config in `drizzle.config.ts`. Sharp edge: the `db` singleton exported from `src/client.ts` is still an **in-memory** store that only mirrors that schema — nothing is persisted across app restarts yet, and SQLite is not opened anywhere.
 - **Editor**: Monaco is bundled from the local `monaco-editor` package by `apps/web/src/lib/monaco-setup.ts`, which overrides `@monaco-editor/react`'s default CDN loader and wires the Vite `?worker` bundles. Keep it that way — the packaged desktop app must load the editor with no network access.
 - **UI library**: `packages/ui` — shadcn components (Tailwind v4) plus `cn()` utility.
