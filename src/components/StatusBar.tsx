@@ -3,6 +3,8 @@ import { useEditor } from './EditorContext';
 export function StatusBar() {
   const {
     activeFilePath,
+    openTabs,
+    fileStatus,
     cursorPosition,
     indentation,
     language,
@@ -10,20 +12,54 @@ export function StatusBar() {
     saveError,
   } = useEditor();
 
-  const fileName = activeFilePath?.split('/').pop() ?? '—';
-  const displayPath = activeFilePath ?? 'No file open';
+  const fileName = activeFilePath?.split('/').pop() ?? 'No file open';
+  const displayPath = activeFilePath ?? 'Open a file to begin';
+  const activeTab = openTabs.find((tab) => tab.path === activeFilePath);
+  const activeStatus = activeFilePath
+    ? fileStatus.get(activeFilePath)
+    : undefined;
+  const state = !activeFilePath
+    ? 'Ready'
+    : saving
+      ? 'Saving...'
+      : saveError
+        ? 'Save failed'
+        : activeStatus?.kind === 'loading'
+          ? 'Loading...'
+          : activeStatus?.kind === 'error'
+            ? 'Error'
+            : activeTab?.isModified
+              ? 'Unsaved'
+              : 'Saved';
+  const stateClass =
+    state === 'Error' || state === 'Save failed'
+      ? 'text-destructive'
+      : state === 'Unsaved' || state === 'Saving...' || state === 'Loading...'
+        ? 'text-amber-500'
+        : 'text-emerald-500';
 
   return (
-    <div className="flex h-6 select-none items-center justify-between border-t bg-muted px-3 text-xs text-muted-foreground">
-      <div className="flex items-center gap-4">
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
-          <span title={activeFilePath ?? undefined}>{fileName}</span>
+    <div className="flex h-7 select-none items-center justify-between gap-3 border-t bg-muted px-3 text-xs text-muted-foreground">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span
+            className={`inline-block h-2 w-2 shrink-0 rounded-full ${
+              stateClass === 'text-destructive'
+                ? 'bg-destructive'
+                : stateClass === 'text-amber-500'
+                  ? 'bg-amber-500'
+                  : 'bg-emerald-500'
+            }`}
+            aria-hidden="true"
+          />
+          <span className="truncate" title={activeFilePath ?? undefined}>
+            {fileName}
+          </span>
         </span>
-        {saving && (
-          <span className="animate-pulse text-amber-500">Saving...</span>
-        )}
-        {!saving && saveError && (
+        <span className={stateClass} role="status" aria-live="polite">
+          {state}
+        </span>
+        {saveError && (
           <span
             role="alert"
             title={saveError}
@@ -33,7 +69,7 @@ export function StatusBar() {
           </span>
         )}
       </div>
-      <div className="flex items-center gap-4">
+      <div className="flex shrink-0 items-center gap-4">
         <span>
           Ln {cursorPosition.line}, Col {cursorPosition.column}
         </span>
@@ -41,7 +77,10 @@ export function StatusBar() {
         <span>UTF-8</span>
         <span>{language}</span>
       </div>
-      <span className="max-w-[30%] truncate text-xs text-muted-foreground/60">
+      <span
+        className="max-w-[30%] truncate text-xs text-muted-foreground/60"
+        title={activeFilePath ?? undefined}
+      >
         {displayPath}
       </span>
     </div>

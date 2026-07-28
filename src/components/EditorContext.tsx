@@ -12,6 +12,7 @@ import type { ReactNode } from 'react';
 import {
   basenameFromPath,
   errorMessage,
+  readNativeTextFile,
   saveNativeFile,
   writeNativeTextFile,
 } from '#/lib/workspace-bridge';
@@ -43,9 +44,12 @@ interface EditorContextValue {
   saving: boolean;
   saveError: string | null;
   hasDirtyTabs: boolean;
+  dirtyTabCount: number;
   openFile: (path: string, name: string, language?: string) => void;
   closeTab: (path: string) => boolean;
   closeAllTabs: () => boolean;
+  reopenLastClosedTab: () => void;
+  reloadActiveFile: () => void;
   setActiveFile: (path: string) => void;
   setCursorPosition: (pos: CursorPosition) => void;
   markModified: (path: string, modified: boolean) => void;
@@ -94,12 +98,6 @@ const browserConfirm = (message: string): boolean => {
   return window.confirm(message);
 };
 
-async function readFileContent(filePath: string): Promise<string> {
-  const { readTextFile } = await import('@tauri-apps/plugin-fs');
-
-  return await readTextFile(filePath);
-}
-
 const withoutKey = <T,>(map: Map<string, T>, key: string): Map<string, T> => {
   if (!map.has(key)) return map;
 
@@ -129,19 +127,34 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     message: string;
   } | null>(null);
   const loadedRef = useRef<Set<string>>(new Set());
+  // Keep a small, disk-backed history for Cmd/Ctrl+Shift+T. Dirty buffers are
+  // deliberately not retained because closing them requires explicit
+  // confirmation to discard their edits.
+  const closedTabsRef = useRef<OpenTab[]>([]);
+  // Request ids are monotonic across the whole provider, never per path, so a
+  // path whose entry is dropped on close (or replaced by Save As) can never
+  // reuse an id an in-flight read is still waiting to match.
+  const nextLoadRequestRef = useRef(1);
+  const loadRequestRef = useRef<Map<string, number>>(new Map());
 
   const loadFile = useCallback((path: string) => {
     if (loadedRef.current.has(path)) return;
 
     loadedRef.current.add(path);
+    const requestId = nextLoadRequestRef.current++;
+    loadRequestRef.current.set(path, requestId);
     setFileStatus((prev) => new Map(prev).set(path, { kind: 'loading' }));
 
-    void readFileContent(path).then(
+    void readNativeTextFile(path).then(
       (content) => {
+        if (loadRequestRef.current.get(path) !== requestId) return;
+
         setFileContents((prev) => new Map(prev).set(path, content));
         setFileStatus((prev) => new Map(prev).set(path, { kind: 'loaded' }));
       },
       (error: unknown) => {
+        if (loadRequestRef.current.get(path) !== requestId) return;
+
         loadedRef.current.delete(path);
         setFileContents((prev) => withoutKey(prev, path));
         setFileStatus((prev) =>
@@ -190,8 +203,13 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       const closedIdx = openTabs.findIndex((tab) => tab.path === path);
       const remaining = openTabs.filter((tab) => tab.path !== path);
 
+      closedTabsRef.current = [
+        ...closedTabsRef.current,
+        { path: closedTab.path, name: closedTab.name, isModified: false },
+      ].slice(-20);
       setOpenTabs(remaining);
       loadedRef.current.delete(path);
+      loadRequestRef.current.delete(path);
       setFileContents((prev) => withoutKey(prev, path));
       setFileStatus((prev) => withoutKey(prev, path));
 
@@ -214,20 +232,60 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     if (
       dirtyTabs.length > 0 &&
       !browserConfirm(
-        `${dirtyTabs.length} file${dirtyTabs.length === 1 ? '' : 's'} have unsaved changes. Close them and discard those changes?`,
+        dirtyTabs.length === 1
+          ? '1 file has unsaved changes. Close it and discard those changes?'
+          : `${dirtyTabs.length} files have unsaved changes. Close them and discard those changes?`,
       )
     ) {
       return false;
     }
 
+    closedTabsRef.current = [
+      ...closedTabsRef.current,
+      ...openTabs.map((tab) => ({ ...tab, isModified: false })),
+    ].slice(-20);
     setOpenTabs([]);
     setActiveFilePath(null);
     loadedRef.current.clear();
+    loadRequestRef.current.clear();
     setFileContents(new Map());
     setFileStatus(new Map());
 
     return true;
   }, [openTabs]);
+
+  const reopenLastClosedTab = useCallback(() => {
+    const lastClosed = closedTabsRef.current.pop();
+
+    if (!lastClosed) return;
+
+    openFile(lastClosed.path, lastClosed.name);
+  }, [openFile]);
+
+  const reloadActiveFile = useCallback(() => {
+    if (!activeFilePath) return;
+
+    const activeTab = openTabs.find((tab) => tab.path === activeFilePath);
+
+    if (
+      activeTab?.isModified &&
+      !browserConfirm(
+        `${activeTab.name} has unsaved changes. Reload it and discard them?`,
+      )
+    ) {
+      return;
+    }
+
+    loadedRef.current.delete(activeFilePath);
+    setSaveFailure(null);
+    setFileContents((prev) => withoutKey(prev, activeFilePath));
+    setOpenTabs((prev) =>
+      prev.map((tab) =>
+        tab.path === activeFilePath ? { ...tab, isModified: false } : tab,
+      ),
+    );
+    loadFile(activeFilePath);
+  }, [activeFilePath, loadFile, openTabs]);
 
   const setActiveFile = useCallback(
     (path: string) => {
@@ -288,8 +346,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     setSaveFailure(null);
 
     try {
-      const { writeTextFile } = await import('@tauri-apps/plugin-fs');
-      await writeTextFile(activeFilePath, content);
+      await writeNativeTextFile(activeFilePath, content);
       markModified(activeFilePath, false);
     } catch (error) {
       setSaveFailure({ path: activeFilePath, message: errorMessage(error) });
@@ -323,7 +380,11 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (!targetPath) return;
+    if (!targetPath) {
+      setSaveFailure(null);
+
+      return;
+    }
 
     if (
       targetPath !== activeFilePath &&
@@ -366,7 +427,9 @@ export function EditorProvider({ children }: { children: ReactNode }) {
         return next;
       });
       loadedRef.current.delete(activeFilePath);
+      loadRequestRef.current.delete(activeFilePath);
       loadedRef.current.add(targetPath);
+      loadRequestRef.current.set(targetPath, nextLoadRequestRef.current++);
       setActiveFilePath(targetPath);
       setLanguage(languageFromPath(targetPath));
       db.addRecentFile(targetPath, targetName);
@@ -381,7 +444,8 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     saveFailure && saveFailure.path === activeFilePath
       ? saveFailure.message
       : null;
-  const hasDirtyTabs = openTabs.some((tab) => tab.isModified);
+  const dirtyTabCount = openTabs.filter((tab) => tab.isModified).length;
+  const hasDirtyTabs = dirtyTabCount > 0;
 
   const value = useMemo<EditorContextValue>(
     () => ({
@@ -395,9 +459,12 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       saving,
       saveError,
       hasDirtyTabs,
+      dirtyTabCount,
       openFile,
       closeTab,
       closeAllTabs,
+      reopenLastClosedTab,
+      reloadActiveFile,
       setActiveFile,
       setCursorPosition,
       markModified,
@@ -417,9 +484,12 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       saving,
       saveError,
       hasDirtyTabs,
+      dirtyTabCount,
       openFile,
       closeTab,
       closeAllTabs,
+      reopenLastClosedTab,
+      reloadActiveFile,
       setActiveFile,
       markModified,
       updateFileContent,

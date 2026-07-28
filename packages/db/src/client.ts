@@ -6,6 +6,24 @@ type Session = InferSelectModel<typeof sessions>;
 type RecentFile = InferSelectModel<typeof recentFiles>;
 type RecentProject = InferSelectModel<typeof recentProjects>;
 
+const byMostRecentlyOpened = <T extends { lastOpenedAt: Date }>(
+  a: T,
+  b: T,
+): number =>
+  new Date(b.lastOpenedAt).getTime() - new Date(a.lastOpenedAt).getTime();
+
+/**
+ * Evict by recency, not by insertion order: an entry reopened long after it was
+ * first added keeps its array position but must outlive newer, staler entries.
+ */
+const trimToMostRecent = <T extends { lastOpenedAt: Date }>(
+  entries: T[],
+  cap: number,
+): T[] =>
+  entries.length <= cap
+    ? entries
+    : [...entries].sort(byMostRecentlyOpened).slice(0, cap);
+
 /**
  * In-memory database client for qedit.
  *
@@ -56,13 +74,7 @@ class DbClient {
   // ── Recent Files ──
 
   getRecentFiles(limit = 20): RecentFile[] {
-    return [...this.recentFileStore]
-      .sort(
-        (a, b) =>
-          new Date(b.lastOpenedAt).getTime() -
-          new Date(a.lastOpenedAt).getTime(),
-      )
-      .slice(0, limit);
+    return [...this.recentFileStore].sort(byMostRecentlyOpened).slice(0, limit);
   }
 
   addRecentFile(filePath: string, displayName: string): RecentFile {
@@ -83,11 +95,7 @@ class DbClient {
     };
 
     this.recentFileStore.push(entry);
-
-    // Cap at 50 entries
-    if (this.recentFileStore.length > 50) {
-      this.recentFileStore = this.recentFileStore.slice(-50);
-    }
+    this.recentFileStore = trimToMostRecent(this.recentFileStore, 50);
 
     return entry;
   }
@@ -102,11 +110,7 @@ class DbClient {
 
   getRecentProjects(limit = 10): RecentProject[] {
     return [...this.recentProjectStore]
-      .sort(
-        (a, b) =>
-          new Date(b.lastOpenedAt).getTime() -
-          new Date(a.lastOpenedAt).getTime(),
-      )
+      .sort(byMostRecentlyOpened)
       .slice(0, limit);
   }
 
@@ -130,10 +134,7 @@ class DbClient {
     };
 
     this.recentProjectStore.push(entry);
-
-    if (this.recentProjectStore.length > 20) {
-      this.recentProjectStore = this.recentProjectStore.slice(-20);
-    }
+    this.recentProjectStore = trimToMostRecent(this.recentProjectStore, 20);
 
     return entry;
   }

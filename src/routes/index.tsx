@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Editor } from '#/components/Editor';
 import { EditorProvider, useEditor } from '#/components/EditorContext';
@@ -26,10 +26,22 @@ function Index() {
 }
 
 function EditorLayout() {
-  const { activeFilePath, closeTab, saveActiveFile, saveActiveFileAs } =
-    useEditor();
+  const {
+    activeFilePath,
+    closeTab,
+    openTabs,
+    hasDirtyTabs,
+    dirtyTabCount,
+    reopenLastClosedTab,
+    reloadActiveFile,
+    setActiveFile,
+    saveActiveFile,
+    saveActiveFileAs,
+  } = useEditor();
   const { openFileDialog, openFolderDialog } = useWorkspace();
   const [quickOpenVisible, setQuickOpenVisible] = useState(false);
+  const dirtyStateRef = useRef({ hasDirtyTabs, dirtyTabCount });
+  dirtyStateRef.current = { hasDirtyTabs, dirtyTabCount };
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
@@ -38,6 +50,9 @@ function EditorLayout() {
       if (!action) return;
 
       event.preventDefault();
+      // Handled here, so keep it away from Monaco and xterm keybindings that
+      // share the same chord (Cmd+Shift+O also opens Monaco's symbol picker).
+      event.stopPropagation();
 
       switch (action) {
         case 'open-file':
@@ -55,6 +70,42 @@ function EditorLayout() {
         case 'close-tab':
           if (activeFilePath) closeTab(activeFilePath);
           break;
+        case 'reopen-tab':
+          reopenLastClosedTab();
+          break;
+        case 'reload-file':
+          reloadActiveFile();
+          break;
+        case 'next-tab': {
+          if (openTabs.length < 2 || !activeFilePath) break;
+
+          const activeIndex = openTabs.findIndex(
+            (tab) => tab.path === activeFilePath,
+          );
+          const nextTab = openTabs[(activeIndex + 1) % openTabs.length];
+
+          if (nextTab) setActiveFile(nextTab.path);
+          break;
+        }
+        case 'previous-tab': {
+          if (openTabs.length < 2 || !activeFilePath) break;
+
+          const activeIndex = openTabs.findIndex(
+            (tab) => tab.path === activeFilePath,
+          );
+          const previousIndex =
+            (activeIndex - 1 + openTabs.length) % openTabs.length;
+          const previousTab = openTabs[previousIndex];
+
+          if (previousTab) setActiveFile(previousTab.path);
+          break;
+        }
+        case 'focus-terminal':
+          window.dispatchEvent(new Event('qedit:focus-terminal'));
+          break;
+        case 'focus-editor':
+          window.dispatchEvent(new Event('qedit:focus-editor'));
+          break;
         case 'quick-open':
           setQuickOpenVisible(true);
           break;
@@ -66,6 +117,10 @@ function EditorLayout() {
     [
       activeFilePath,
       closeTab,
+      openTabs,
+      reopenLastClosedTab,
+      reloadActiveFile,
+      setActiveFile,
       openFileDialog,
       openFolderDialog,
       saveActiveFile,
@@ -74,10 +129,58 @@ function EditorLayout() {
   );
 
   useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown);
+    // Capture before Monaco or xterm can consume a platform shortcut. The
+    // target guard in shortcutActionForEvent still leaves ordinary text fields
+    // and terminal input to their native behavior.
+    window.addEventListener('keydown', handleKeyDown, true);
 
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [handleKeyDown]);
+
+  useEffect(() => {
+    const message = () => {
+      const { dirtyTabCount: count } = dirtyStateRef.current;
+
+      return count === 1
+        ? '1 file has unsaved changes. Exit qedit and discard it?'
+        : `${count} files have unsaved changes. Exit qedit and discard them?`;
+    };
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!dirtyStateRef.current.hasDirtyTabs) return;
+
+      event.preventDefault();
+      event.returnValue = message();
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void import('@tauri-apps/api/window')
+      .then(({ getCurrentWindow }) =>
+        getCurrentWindow().onCloseRequested((event) => {
+          if (
+            dirtyStateRef.current.hasDirtyTabs &&
+            !window.confirm(message())
+          ) {
+            event.preventDefault();
+          }
+        }),
+      )
+      .then((cleanup) => {
+        if (disposed) cleanup();
+        else unlisten = cleanup;
+      })
+      .catch(() => {
+        // Browser development and Vitest do not provide Tauri's window IPC.
+      });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
 
   return (
     <div className="grid h-screen w-screen overflow-hidden bg-background text-foreground">

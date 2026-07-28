@@ -7,6 +7,10 @@
     "fs:default",
     "fs:allow-read",
     "fs:allow-write",
+    {
+      "identifier": "fs:scope",
+      "allow": [{ "path": "$HOME" }, { "path": "$HOME/**" }]
+    },
     "shell:default",
     "shell:allow-open",
     "dialog:default",

@@ -24,8 +24,19 @@ describe('shortcutActionForEvent', () => {
     );
   });
 
-  it('dispatches close, quick-open, and find shortcuts', () => {
+  it('dispatches close, reopen, reload, focus, and search shortcuts', () => {
     expect(shortcutActionForEvent(event({ key: 'w' }))).toBe('close-tab');
+    expect(shortcutActionForEvent(event({ key: 't', shiftKey: true }))).toBe(
+      'reopen-tab',
+    );
+    expect(shortcutActionForEvent(event({ key: 'r', shiftKey: true }))).toBe(
+      'reload-file',
+    );
+    expect(shortcutActionForEvent(event({ key: 'PageDown' }))).toBe('next-tab');
+    expect(
+      shortcutActionForEvent(event({ key: 'PageUp', shiftKey: true })),
+    ).toBe('previous-tab');
+    expect(shortcutActionForEvent(event({ key: '`' }))).toBe('focus-terminal');
     expect(shortcutActionForEvent(event({ key: 'p' }))).toBe('quick-open');
     expect(shortcutActionForEvent(event({ key: 'f' }))).toBe('find');
   });
@@ -49,6 +60,32 @@ describe('shortcutActionForEvent', () => {
     expect(
       shortcutActionForEvent(event({ key: 'w', target: contentEditable })),
     ).toBeNull();
+  });
+
+  it('leaves terminal input shortcuts to xterm but keeps a way back out', () => {
+    const terminal = document.createElement('textarea');
+    terminal.className = 'xterm-helper-textarea';
+
+    expect(shortcutActionForEvent(event({ key: 's', target: terminal }))).toBe(
+      null,
+    );
+    expect(shortcutActionForEvent(event({ key: 'w', target: terminal }))).toBe(
+      null,
+    );
+    expect(shortcutActionForEvent(event({ key: '`', target: terminal }))).toBe(
+      'focus-editor',
+    );
+  });
+
+  it('toggles focus back to the editor from anywhere inside the terminal', () => {
+    const terminalRoot = document.createElement('div');
+    terminalRoot.className = 'xterm';
+    const screen = document.createElement('div');
+    terminalRoot.append(screen);
+
+    expect(shortcutActionForEvent(event({ key: '`', target: screen }))).toBe(
+      'focus-editor',
+    );
   });
 
   it('keeps workspace shortcuts alive inside the Monaco editor', () => {

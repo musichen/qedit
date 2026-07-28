@@ -6,11 +6,20 @@ import { EditorProvider, useEditor } from '../components/EditorContext';
 
 const readTextFile = vi.fn<(path: string) => Promise<string>>();
 const writeTextFile = vi.fn<(path: string, content: string) => Promise<void>>();
+const saveDialog = vi.fn<(options: unknown) => Promise<string | null>>();
 
 vi.mock('@tauri-apps/plugin-fs', () => ({
   readTextFile: (path: string) => readTextFile(path),
   writeTextFile: (path: string, content: string) =>
     writeTextFile(path, content),
+}));
+
+vi.mock('@tauri-apps/plugin-dialog', () => ({
+  save: (options: unknown) => saveDialog(options),
+}));
+
+vi.mock('@tauri-apps/api/path', () => ({
+  homeDir: () => Promise.resolve('/home'),
 }));
 
 const pending = <T,>(): Promise<T> => new Promise<T>(() => {});
@@ -22,6 +31,8 @@ const wrapper = ({ children }: { children: ReactNode }) => (
 beforeEach(() => {
   readTextFile.mockReset();
   writeTextFile.mockReset();
+  saveDialog.mockReset();
+  saveDialog.mockResolvedValue(null);
   // Reads hang unless a test opts into a resolved or rejected read, so
   // every file starts in a deterministic 'loading' state.
   readTextFile.mockImplementation(() => pending<string>());
@@ -85,6 +96,45 @@ describe('EditorContext', () => {
       );
     });
 
+    it('ignores a stale read that resolves after the tab was closed and reopened', async () => {
+      const resolvers: Array<(content: string) => void> = [];
+      readTextFile.mockImplementation(
+        () => new Promise<string>((resolve) => resolvers.push(resolve)),
+      );
+
+      const { result } = renderHook(() => useEditor(), { wrapper });
+
+      act(() => {
+        result.current.openFile('/home/big.ts', 'big.ts');
+      });
+
+      await waitFor(() => expect(resolvers).toHaveLength(1));
+
+      act(() => {
+        expect(result.current.closeTab('/home/big.ts')).toBe(true);
+      });
+
+      act(() => {
+        result.current.openFile('/home/big.ts', 'big.ts');
+      });
+
+      await waitFor(() => expect(resolvers).toHaveLength(2));
+
+      await act(async () => {
+        resolvers[1]?.('current disk content');
+        resolvers[0]?.('stale buffer');
+      });
+
+      await waitFor(() => {
+        expect(result.current.fileStatus.get('/home/big.ts')).toEqual({
+          kind: 'loaded',
+        });
+      });
+      expect(result.current.fileContents.get('/home/big.ts')).toBe(
+        'current disk content',
+      );
+    });
+
     it('records an error status when the read rejects', async () => {
       readTextFile.mockRejectedValue(new Error('permission denied'));
 
@@ -97,7 +147,7 @@ describe('EditorContext', () => {
       await waitFor(() => {
         expect(result.current.fileStatus.get('/home/test.ts')).toEqual({
           kind: 'error',
-          message: 'permission denied',
+          message: 'Could not read /home/test.ts: permission denied',
         });
       });
       expect(result.current.fileContents.has('/home/test.ts')).toBe(false);
@@ -151,6 +201,45 @@ describe('EditorContext', () => {
       });
 
       expect(result.current.activeFilePath).toBe('/home/a.ts');
+    });
+  });
+
+  describe('dirty tab protection and history', () => {
+    it('keeps a dirty tab open when close is cancelled', () => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      const { result } = renderHook(() => useEditor(), { wrapper });
+
+      act(() => {
+        result.current.openFile('/home/test.ts', 'test.ts');
+        result.current.markModified('/home/test.ts', true);
+      });
+
+      act(() => {
+        expect(result.current.closeTab('/home/test.ts')).toBe(false);
+      });
+
+      expect(result.current.openTabs).toHaveLength(1);
+      expect(confirm).toHaveBeenCalledWith(
+        'test.ts has unsaved changes. Close it and discard them?',
+      );
+      confirm.mockRestore();
+    });
+
+    it('reopens the last cleanly closed tab', () => {
+      const { result } = renderHook(() => useEditor(), { wrapper });
+
+      act(() => {
+        result.current.openFile('/home/test.ts', 'test.ts');
+      });
+      act(() => {
+        expect(result.current.closeTab('/home/test.ts')).toBe(true);
+      });
+      act(() => {
+        result.current.reopenLastClosedTab();
+      });
+
+      expect(result.current.openTabs[0]?.path).toBe('/home/test.ts');
+      expect(result.current.activeFilePath).toBe('/home/test.ts');
     });
   });
 
@@ -311,6 +400,65 @@ describe('EditorContext', () => {
       expect(result.current.openTabs[0]?.isModified).toBe(false);
     });
 
+    it('saves through Save As and moves the active tab to the new path', async () => {
+      readTextFile.mockResolvedValue('original');
+      saveDialog.mockResolvedValue('/home/renamed.ts');
+
+      const { result } = renderHook(() => useEditor(), { wrapper });
+
+      act(() => {
+        result.current.openFile('/home/test.ts', 'test.ts');
+      });
+      await waitFor(() => {
+        expect(result.current.fileStatus.get('/home/test.ts')?.kind).toBe(
+          'loaded',
+        );
+      });
+
+      act(() => {
+        result.current.updateFileContent('/home/test.ts', 'renamed');
+        result.current.markModified('/home/test.ts', true);
+      });
+      await act(async () => {
+        await result.current.saveActiveFileAs();
+      });
+
+      expect(saveDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ defaultPath: '/home/test.ts' }),
+      );
+      expect(writeTextFile).toHaveBeenCalledWith('/home/renamed.ts', 'renamed');
+      expect(result.current.activeFilePath).toBe('/home/renamed.ts');
+      expect(result.current.openTabs[0]).toEqual({
+        path: '/home/renamed.ts',
+        name: 'renamed.ts',
+        isModified: false,
+      });
+    });
+
+    it('rejects a Save As destination outside the home directory', async () => {
+      readTextFile.mockResolvedValue('original');
+      saveDialog.mockResolvedValue('/tmp/renamed.ts');
+
+      const { result } = renderHook(() => useEditor(), { wrapper });
+
+      act(() => {
+        result.current.openFile('/home/test.ts', 'test.ts');
+      });
+      await waitFor(() => {
+        expect(result.current.fileStatus.get('/home/test.ts')?.kind).toBe(
+          'loaded',
+        );
+      });
+
+      await act(async () => {
+        await result.current.saveActiveFileAs();
+      });
+
+      expect(result.current.saveError).toContain('only open files and folders');
+      expect(writeTextFile).not.toHaveBeenCalled();
+      expect(result.current.activeFilePath).toBe('/home/test.ts');
+    });
+
     it('keeps the dirty flag and reports the error when the write fails', async () => {
       readTextFile.mockResolvedValue('original');
       writeTextFile.mockRejectedValue(new Error('disk full'));
@@ -338,6 +486,51 @@ describe('EditorContext', () => {
 
       expect(result.current.saveError).toContain('disk full');
       expect(result.current.openTabs[0]?.isModified).toBe(true);
+    });
+
+    it('clears a previous save failure when the file is reloaded', async () => {
+      readTextFile.mockResolvedValue('original');
+      writeTextFile.mockRejectedValue(new Error('disk full'));
+
+      const { result } = renderHook(() => useEditor(), { wrapper });
+
+      act(() => {
+        result.current.openFile('/home/test.ts', 'test.ts');
+      });
+
+      await waitFor(() => {
+        expect(result.current.fileStatus.get('/home/test.ts')?.kind).toBe(
+          'loaded',
+        );
+      });
+
+      act(() => {
+        result.current.updateFileContent('/home/test.ts', 'edited');
+        result.current.markModified('/home/test.ts', true);
+      });
+
+      await act(async () => {
+        await result.current.saveActiveFile();
+      });
+
+      expect(result.current.saveError).toContain('disk full');
+
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+      act(() => {
+        result.current.reloadActiveFile();
+      });
+
+      confirm.mockRestore();
+
+      await waitFor(() => {
+        expect(result.current.fileStatus.get('/home/test.ts')?.kind).toBe(
+          'loaded',
+        );
+      });
+
+      expect(result.current.saveError).toBeNull();
+      expect(result.current.openTabs[0]?.isModified).toBe(false);
     });
   });
 });

@@ -16,15 +16,22 @@ Monaco as the editing surface.
   skipped.
 - Open files stack in the tab bar; a dot marks unsaved edits. Closing a modified
   tab asks for confirmation and discards those edits, and opening another folder
-  closes the current tabs the same way. Closing a clean tab drops its buffer, so
-  reopening the file re-reads it from disk.
+  or quitting the app asks the same way. Closing a clean tab drops its buffer, so
+  reopening the file re-reads it from disk. **Cmd/Ctrl+Shift+T** reopens recently
+  closed tabs, and **Cmd/Ctrl+Shift+R** re-reads the active file from disk.
+- **Save As** writes the buffer to a path you pick in the native dialog and moves
+  the tab to it; it refuses a target that is already open in another tab.
+- Quick open (**Cmd/Ctrl+P**) searches the workspace files and your recent files
+  by name or path, with arrow keys, Home/End, and Enter to open.
 - A file that is still loading, or that failed to read, cannot be edited or
   saved - the status bar reports the reason. The status bar also shows the file
-  path, cursor position, indentation, language, and any save error.
+  path, cursor position, indentation, language, the current state (loading,
+  unsaved, saving, saved, or failed), and any save error.
 - An integrated terminal sits below the editor and runs your `$SHELL`
   (`%COMSPEC%` on Windows) in the open project directory, or your home directory
-  when no folder is open. It
-  follows the workspace root and its shells are terminated when the app exits.
+  when no folder is open. It follows the workspace root, reports its state
+  (starting, ready, exited, or unavailable), and its shells are terminated when
+  the app exits. **Cmd/Ctrl+\`** moves focus between the editor and the terminal.
 
 ### Shortcuts
 
@@ -35,6 +42,11 @@ Monaco as the editing surface.
 | **Cmd/Ctrl+S** | Save |
 | **Cmd/Ctrl+Shift+S** | Save as |
 | **Cmd/Ctrl+W** | Close active tab |
+| **Cmd/Ctrl+Shift+T** | Reopen last closed tab |
+| **Cmd/Ctrl+Shift+R** | Reload active file from disk |
+| **Cmd/Ctrl+PageDown** / **Ctrl+Tab** | Next tab |
+| **Cmd/Ctrl+PageUp** / **Ctrl+Shift+Tab** | Previous tab |
+| **Cmd/Ctrl+\`** | Toggle focus between editor and terminal |
 | **Cmd/Ctrl+P** | Quick open |
 | **Cmd/Ctrl+F** | Find in file |
 

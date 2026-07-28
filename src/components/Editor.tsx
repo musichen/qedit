@@ -37,9 +37,17 @@ export function Editor() {
       editorRef.current?.trigger('keyboard', 'actions.find', null);
     };
 
-    window.addEventListener('qedit:find', handleFind);
+    const handleFocus = () => {
+      editorRef.current?.focus();
+    };
 
-    return () => window.removeEventListener('qedit:find', handleFind);
+    window.addEventListener('qedit:find', handleFind);
+    window.addEventListener('qedit:focus-editor', handleFocus);
+
+    return () => {
+      window.removeEventListener('qedit:find', handleFind);
+      window.removeEventListener('qedit:focus-editor', handleFocus);
+    };
   }, []);
 
   const handleEditorMount: OnMount = useCallback(
