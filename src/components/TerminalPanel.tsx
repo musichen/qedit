@@ -33,6 +33,7 @@ export function TerminalPanel() {
     setError(null);
     setTerminalState('starting');
     const disposers: Array<() => void> = [];
+    let inputDisposable: { dispose: () => void } | undefined;
 
     const runDisposers = () => {
       while (disposers.length > 0) disposers.pop()?.();
@@ -92,6 +93,9 @@ export function TerminalPanel() {
             `\r\n[process exited${event.code === null ? '' : ` with code ${event.code}`} ]\r\n`,
           );
           sessionRef.current = null;
+          terminal.options.disableStdin = true;
+          inputDisposable?.dispose();
+          inputDisposable = undefined;
           setTerminalState('exited');
         };
 
@@ -147,11 +151,17 @@ export function TerminalPanel() {
         for (const event of replay) applyEvent(event);
         if (!exitedBeforeAttach) setTerminalState('ready');
 
-        terminal.onData((data) => {
-          void writeTerminal(sessionId, data).catch((cause: unknown) =>
-            setError(cause instanceof Error ? cause.message : String(cause)),
-          );
-        });
+        if (!exitedBeforeAttach) {
+          inputDisposable = terminal.onData((data) => {
+            void writeTerminal(sessionId, data).catch((cause: unknown) =>
+              setError(cause instanceof Error ? cause.message : String(cause)),
+            );
+          });
+          disposers.push(() => {
+            inputDisposable?.dispose();
+            inputDisposable = undefined;
+          });
+        }
         const resize = () => {
           fit.fit();
           void resizeTerminal(sessionId, terminal.cols, terminal.rows).catch(
@@ -161,6 +171,12 @@ export function TerminalPanel() {
         window.addEventListener('resize', resize);
         disposers.push(() => window.removeEventListener('resize', resize));
       } catch (cause) {
+        runDisposers();
+        const sessionId = sessionRef.current;
+        sessionRef.current = null;
+        if (sessionId !== null) {
+          void closeTerminal(sessionId).catch(() => undefined);
+        }
         if (!disposed) {
           setError(cause instanceof Error ? cause.message : String(cause));
           setTerminalState('error');
@@ -175,7 +191,9 @@ export function TerminalPanel() {
       runDisposers();
       const sessionId = sessionRef.current;
       sessionRef.current = null;
-      if (sessionId !== null) void closeTerminal(sessionId);
+      if (sessionId !== null) {
+        void closeTerminal(sessionId).catch(() => undefined);
+      }
     };
   }, [workspaceRoot]);
 

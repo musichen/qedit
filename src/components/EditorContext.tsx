@@ -136,6 +136,10 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   // reuse an id an in-flight read is still waiting to match.
   const nextLoadRequestRef = useRef(1);
   const loadRequestRef = useRef<Map<string, number>>(new Map());
+  const activeFileRef = useRef<string | null>(null);
+  const openTabsRef = useRef<OpenTab[]>([]);
+  activeFileRef.current = activeFilePath;
+  openTabsRef.current = openTabs;
 
   const loadFile = useCallback((path: string) => {
     if (loadedRef.current.has(path)) return;
@@ -370,10 +374,11 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    const sourcePath = activeFilePath;
     let targetPath: string | null;
 
     try {
-      targetPath = await saveNativeFile(activeFilePath);
+      targetPath = await saveNativeFile(sourcePath);
     } catch (error) {
       setSaveFailure({ path: activeFilePath, message: errorMessage(error) });
 
@@ -386,12 +391,21 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    // The dialog can stay open while the user switches or closes tabs. Do not
+    // write a Save As result into a different active buffer.
     if (
-      targetPath !== activeFilePath &&
-      openTabs.some((tab) => tab.path === targetPath)
+      activeFileRef.current !== sourcePath ||
+      !openTabsRef.current.some((tab) => tab.path === sourcePath)
+    ) {
+      return;
+    }
+
+    if (
+      targetPath !== sourcePath &&
+      openTabsRef.current.some((tab) => tab.path === targetPath)
     ) {
       setSaveFailure({
-        path: activeFilePath,
+        path: sourcePath,
         message: `Could not save as ${targetPath}: that file is already open`,
       });
 
@@ -405,40 +419,52 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       await writeNativeTextFile(targetPath, content);
       const targetName = basenameFromPath(targetPath);
 
+      // Keep the source tab's rename scoped to the tab that initiated Save As.
+      // The user may have switched to another tab while the native write was
+      // in flight, in which case that tab must remain active.
+      const sourceStillOpen = openTabsRef.current.some(
+        (tab) => tab.path === sourcePath,
+      );
+      if (!sourceStillOpen) return;
+
       setOpenTabs((prev) =>
         prev.map((tab) =>
-          tab.path === activeFilePath
+          tab.path === sourcePath
             ? { path: targetPath, name: targetName, isModified: false }
             : tab,
         ),
       );
       setFileContents((prev) => {
         const next = new Map(prev);
-        next.delete(activeFilePath);
+        next.delete(sourcePath);
         next.set(targetPath, content);
 
         return next;
       });
       setFileStatus((prev) => {
         const next = new Map(prev);
-        next.delete(activeFilePath);
+        next.delete(sourcePath);
         next.set(targetPath, { kind: 'loaded' });
 
         return next;
       });
-      loadedRef.current.delete(activeFilePath);
-      loadRequestRef.current.delete(activeFilePath);
+      loadedRef.current.delete(sourcePath);
+      loadRequestRef.current.delete(sourcePath);
       loadedRef.current.add(targetPath);
       loadRequestRef.current.set(targetPath, nextLoadRequestRef.current++);
-      setActiveFilePath(targetPath);
-      setLanguage(languageFromPath(targetPath));
+      setActiveFilePath((current) =>
+        current === sourcePath ? targetPath : current,
+      );
+      if (activeFileRef.current === sourcePath) {
+        setLanguage(languageFromPath(targetPath));
+      }
       db.addRecentFile(targetPath, targetName);
     } catch (error) {
       setSaveFailure({ path: activeFilePath, message: errorMessage(error) });
     } finally {
       setSaving(false);
     }
-  }, [activeFilePath, fileContents, fileStatus, openTabs]);
+  }, [activeFilePath, fileContents, fileStatus]);
 
   const saveError =
     saveFailure && saveFailure.path === activeFilePath

@@ -186,7 +186,9 @@ export function FileTree() {
                     depth={0}
                     activeFilePath={activeFilePath}
                     onOpenFile={handleOpenFile}
-                    onEntriesLoaded={registerEntries}
+                    onEntriesLoaded={(entries) =>
+                      registerEntries(entries, workspaceRoot)
+                    }
                   />
                 ))}
               </div>
