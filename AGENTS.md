@@ -1,0 +1,45 @@
+# Project agent memory
+
+This file is the project's committed home for project-intrinsic agent knowledge: build, test, release, architecture, and sharp-edge notes that should travel with the code.
+
+- Add durable project-specific notes here as they are discovered through real work.
+
+## Architecture
+
+- **Monorepo**: pnpm workspaces + Turbo (`turbo.json`, `pnpm-workspace.yaml`). Packages under `apps/*`, `packages/**`, `tooling/*`.
+- **Frontend**: `apps/web` — TanStack Start (React + Vite + SSR router). See `apps/web/src/router.tsx` for route setup, `apps/web/vite.config.ts` for plugins.
+- **Desktop shell**: Tauri 2 in `apps/web/src-tauri/`. Plugins: `fs` (scope `$HOME/**`), `shell` (open), `dialog`. Config at `tauri.conf.json`, capabilities at `capabilities/default.json`.
+- **Database**: `packages/db` — Drizzle ORM + SQLite. Schema in `src/schema.ts` (`sessions`, `recent_files`). Config in `drizzle.config.ts`.
+- **UI library**: `packages/ui` — shadcn components (Tailwind v4) plus `cn()` utility.
+- **Shared**: `packages/shared` — `cn` utility, event emitter context, registry pattern, mode utils.
+- **Tooling**: `tooling/typescript` — shared `base.json` tsconfig.
+
+## Commands
+
+| Command | Scope |
+|---|---|
+| `pnpm install` | Install all workspace deps |
+| `pnpm run dev` | Start all dev servers (Tauri: `pnpm --filter @qedit/web tauri dev`) |
+| `pnpm run lint` | oxlint across workspace |
+| `pnpm run format` | oxfmt --check |
+| `pnpm run format:fix` | oxfmt auto-fix |
+| `pnpm run typecheck` | tsc --noEmit per workspace via Turbo |
+| `pnpm run test` | vitest across workspace via Turbo |
+| `pnpm run build` | Vite build via Turbo |
+| `cd apps/web && pnpm tauri build` | Full Tauri desktop build (Rust + frontend) |
+| `pnpm run db:generate` | drizzle-kit generate migrations |
+
+## Constraints
+
+- TypeScript strict mode throughout (`strict: true`, `noUnusedLocals`, `noUnusedParameters`).
+- `verbatimModuleSyntax: true` — use `import type` for type-only imports.
+- ESM (`"type": "module"`).
+- No Supabase, Stripe, auth, or SaaS code. This is a file editor.
+- Tauri fs scope limited to `$HOME/**`. No network permissions beyond localhost.
+
+## Maintaining this file
+
+Keep this file for knowledge useful to almost every future agent session in this project.
+Do not repeat what the codebase already shows; point to the authoritative file or command instead.
+Prefer rewriting or pruning existing entries over appending new ones.
+When updating this file, preserve this bar for all agents and keep entries concise.
