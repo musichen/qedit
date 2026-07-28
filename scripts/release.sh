@@ -60,7 +60,7 @@ EOF
 
 # --- Collect build artifacts ---
 ARTIFACTS=""
-BUNDLE_DIR="apps/web/src-tauri/target/release/bundle"
+BUNDLE_DIR="src-tauri/target/release/bundle"
 if [ -d "$BUNDLE_DIR" ]; then
   # Find dmg, deb, msi artifacts
   for ext in dmg deb msi; do
