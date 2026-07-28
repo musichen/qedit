@@ -1,0 +1,7 @@
+{
+  "extends": "@qedit/tsconfig/base.json",
+  "compilerOptions": {
+    "outDir": "./dist"
+  },
+  "include": ["src", "drizzle.config.ts"]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@qedit/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./utils": "./src/utils.ts",
+    "./events": "./src/events/index.tsx",
+    "./registry": "./src/registry/index.ts",
+    "./mode-utils": "./src/mode-utils.ts"
+  },
+  "scripts": {
+    "clean": "git clean -xdf .turbo node_modules",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run"
+  },
+  "devDependencies": {
+    "@qedit/tsconfig": "workspace:*",
+    "@types/react": "catalog:",
+    "vitest": "catalog:"
+  }
+}

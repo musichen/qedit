@@ -1,0 +1,33 @@
+{
+  "name": "qedit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "scripts": {
+    "turbo": "turbo",
+    "build": "turbo build --cache-dir=.turbo",
+    "dev": "cross-env FORCE_COLOR=1 turbo dev --parallel",
+    "format": "oxfmt --check",
+    "format:fix": "oxfmt",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "typecheck": "turbo typecheck --cache-dir=.turbo",
+    "test": "turbo test test:unit --cache-dir=.turbo",
+    "test:unit": "turbo test:unit --cache-dir=.turbo",
+    "db:generate": "pnpm --filter @qedit/db generate",
+    "db:migrate": "pnpm --filter @qedit/db migrate"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "cross-env": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "turbo": "catalog:",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "node": ">=20.10.0"
+  },
+  "packageManager": "pnpm@11.15.1"
+}
