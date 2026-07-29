@@ -32,15 +32,16 @@ if [[ -z "$DRY_RUN" && -n "$(git status --porcelain --untracked-files=all)" ]]; 
   exit 1
 fi
 
-# Resolve the approved GitHub release CLI before anything is published. CI uses
-# npx because gh-axi is intentionally not a project dependency; local operators
-# should install gh-axi once so release publication does not fetch at runtime.
+# Resolve the release CLI before anything is published: a missing CLI must not
+# be discovered after the tag has already been pushed to the remote. The CLI
+# must already be installed; fetching an unpinned package over the network at
+# publish time is not acceptable in the step that uploads artifacts.
 if command -v gh-axi >/dev/null 2>&1; then
   RELEASE_CLI=(gh-axi)
-elif command -v npx >/dev/null 2>&1; then
-  RELEASE_CLI=(npx -y gh-axi)
+elif command -v gh >/dev/null 2>&1; then
+  RELEASE_CLI=(gh)
 else
-  echo "Error: gh-axi is required to create the GitHub release (install gh-axi or npx)" >&2
+  echo "Error: neither gh-axi nor gh is installed; cannot create the release" >&2
   exit 1
 fi
 

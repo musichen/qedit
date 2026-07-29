@@ -66,15 +66,18 @@ BUNDLE_DIR="$PROJECT_ROOT/src-tauri/target/release/bundle"
 rm -rf "$BUNDLE_DIR" "$OUT_DIR"
 mkdir -p "$OUT_DIR"
 
-case "$PLATFORM" in
-  macos) BUNDLES='app,dmg' ;;
-  windows) BUNDLES='msi,nsis' ;;
-  linux) BUNDLES='deb,appimage' ;;
-esac
-
 cd "$PROJECT_ROOT"
 echo "Building qedit v$VERSION for $TARGET on $HOST_TRIPLE"
-pnpm exec tauri build --bundles "$BUNDLES"
+case "$PLATFORM" in
+  macos)
+    # Reuse build-mac.sh rather than calling tauri build directly so this path
+    # gets the same headless-Finder DMG retry (see scripts/build-mac.sh) instead
+    # of hard-failing when create-dmg's AppleScript step has no live Finder.
+    bash "$PROJECT_ROOT/scripts/build-mac.sh"
+    ;;
+  windows) pnpm exec tauri build --bundles msi,nsis ;;
+  linux) pnpm exec tauri build --bundles deb,appimage ;;
+esac
 
 copy_one() {
   local search_dir="$1"

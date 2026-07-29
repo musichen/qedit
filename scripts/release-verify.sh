@@ -56,7 +56,12 @@ NODE
       exit 1
     fi
   done
-  [[ ! -e "$dir"/rw.*.dmg ]] || { echo "Error: temporary DMG image found in release output: $dir" >&2; exit 1; }
+  local rw_dmg
+  for rw_dmg in "$dir"/rw.*.dmg; do
+    [[ -e "$rw_dmg" ]] || continue
+    echo "Error: temporary DMG image found in release output: $rw_dmg" >&2
+    exit 1
+  done
   if [[ "${QEDIT_REQUIRE_SIGNED:-}" == 1 && "$target" != linux-* ]]; then
     [[ -s "$dir/signing.json" ]] || { echo "Error: signing status missing for $target" >&2; exit 1; }
     node - "$dir/signing.json" "$target" <<'NODE'

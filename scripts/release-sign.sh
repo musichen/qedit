@@ -12,11 +12,17 @@ OUT_DIR="${3:-$PROJECT_ROOT/dist/release/v${VERSION}/${TARGET}}"
 }
 
 STATUS_FILE="$OUT_DIR/signing.json"
+MANIFEST_FILE="$OUT_DIR/manifest.json"
 write_status() {
-  node - "$STATUS_FILE" "$TARGET" "$VERSION" "$1" "$2" <<'NODE'
+  node - "$STATUS_FILE" "$MANIFEST_FILE" "$TARGET" "$VERSION" "$1" "$2" <<'NODE'
 const fs = require('node:fs');
-const [path, target, version, status, reason] = process.argv.slice(2);
+const [path, manifestPath, target, version, status, reason] = process.argv.slice(2);
 fs.writeFileSync(path, JSON.stringify({ schema: 1, target, version, status, reason }, null, 2) + '\n');
+if (fs.existsSync(manifestPath)) {
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  manifest.signing = { status, reason };
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+}
 NODE
 }
 
