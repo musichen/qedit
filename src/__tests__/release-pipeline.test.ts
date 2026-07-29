@@ -99,9 +99,7 @@ describe('release pipeline contract', () => {
     expect(workflow).toContain('actions/attest-build-provenance@v2');
     expect(workflow).toContain('QEDIT_REQUIRE_SIGNING');
     expect(workflow).toContain('Resolve macOS signing mode');
-    expect(workflow).toContain(
-      "steps.macos-signing.outputs.enabled == 'true'",
-    );
+    expect(workflow).toContain("steps.macos-signing.outputs.enabled == 'true'");
     expect(workflow).toContain('CI: true');
     expect(workflow).toContain('path: dist/release');
     expect(workflow).not.toContain('xdg-utils');
