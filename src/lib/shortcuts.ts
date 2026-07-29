@@ -8,6 +8,18 @@ export type ShortcutAction =
   | 'reload-file'
   | 'next-tab'
   | 'previous-tab'
+  | 'close-terminal'
+  | 'next-terminal'
+  | 'previous-terminal'
+  | 'terminal-1'
+  | 'terminal-2'
+  | 'terminal-3'
+  | 'terminal-4'
+  | 'terminal-5'
+  | 'terminal-6'
+  | 'terminal-7'
+  | 'terminal-8'
+  | 'terminal-9'
   | 'focus-terminal'
   | 'focus-editor'
   | 'quick-open'
@@ -35,6 +47,14 @@ function isTerminalTarget(target: EventTarget | null): boolean {
   return (
     target.closest('.xterm') !== null ||
     target.closest('.xterm-helper-textarea') !== null
+  );
+}
+
+function isTerminalNavigationTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+
+  return (
+    isTerminalTarget(target) || target.closest('[data-terminal-tab]') !== null
   );
 }
 
@@ -67,6 +87,21 @@ export function shortcutActionForEvent(
   if (!(event.metaKey || event.ctrlKey)) return null;
 
   const key = event.key.toLowerCase();
+
+  if (isTerminalNavigationTarget(event.target)) {
+    if (key === 'pagedown' || (key === 'tab' && !event.shiftKey)) {
+      return 'next-terminal';
+    }
+    if (key === 'pageup' || (key === 'tab' && event.shiftKey)) {
+      return 'previous-terminal';
+    }
+    if (/^[1-9]$/.test(key)) {
+      return `terminal-${key}` as ShortcutAction;
+    }
+    if (key === 'w' && !isTerminalTarget(event.target)) {
+      return 'close-terminal';
+    }
+  }
 
   if (key === '`') {
     return isTerminalTarget(event.target) ? 'focus-editor' : 'focus-terminal';
