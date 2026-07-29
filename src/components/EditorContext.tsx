@@ -391,12 +391,15 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // The dialog can stay open while the user switches or closes tabs. Do not
-    // write a Save As result into a different active buffer.
-    if (
-      activeFileRef.current !== sourcePath ||
-      !openTabsRef.current.some((tab) => tab.path === sourcePath)
-    ) {
+    // The dialog can stay open while the user switches or closes tabs. The
+    // content and the source path are captured above, so a tab switch is
+    // harmless, but a closed source tab means there is no buffer left to save.
+    if (!openTabsRef.current.some((tab) => tab.path === sourcePath)) {
+      setSaveFailure({
+        path: sourcePath,
+        message: `Could not save as ${targetPath}: ${sourcePath} was closed before the save completed`,
+      });
+
       return;
     }
 
@@ -419,9 +422,13 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       await writeNativeTextFile(targetPath, content);
       const targetName = basenameFromPath(targetPath);
 
+      // The file exists on disk now, so it belongs in Recent regardless of what
+      // happened to the tabs while the native write was in flight.
+      db.addRecentFile(targetPath, targetName);
+
       // Keep the source tab's rename scoped to the tab that initiated Save As.
-      // The user may have switched to another tab while the native write was
-      // in flight, in which case that tab must remain active.
+      // The user may have closed it while the write was in flight, in which
+      // case there is no tab left to rename.
       const sourceStillOpen = openTabsRef.current.some(
         (tab) => tab.path === sourcePath,
       );
@@ -458,9 +465,8 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       if (activeFileRef.current === sourcePath) {
         setLanguage(languageFromPath(targetPath));
       }
-      db.addRecentFile(targetPath, targetName);
     } catch (error) {
-      setSaveFailure({ path: activeFilePath, message: errorMessage(error) });
+      setSaveFailure({ path: sourcePath, message: errorMessage(error) });
     } finally {
       setSaving(false);
     }

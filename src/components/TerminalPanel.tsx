@@ -63,7 +63,10 @@ export function TerminalPanel() {
         terminal.open(containerRef.current);
         fit.fit();
         terminalRef.current = terminal;
-        disposers.push(() => terminal.dispose());
+        disposers.push(() => {
+          terminal.dispose();
+          terminalRef.current = null;
+        });
 
         const cwd = workspaceRoot ?? (await getHomeForTerminal());
         if (disposed) {

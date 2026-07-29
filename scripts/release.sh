@@ -97,8 +97,19 @@ git push origin "v${VERSION}"
 echo ""
 echo "=== Creating GitHub release ==="
 # Arrays preserve artifact paths and release notes without eval or shell
-# interpolation surprises.
-npx -y gh-axi release create "v${VERSION}" \
+# interpolation surprises. The release CLI must already be installed: fetching
+# an unpinned package over the network at publish time is not acceptable in the
+# step that signs and uploads artifacts.
+if command -v gh-axi >/dev/null 2>&1; then
+  RELEASE_CLI=(gh-axi)
+elif command -v gh >/dev/null 2>&1; then
+  RELEASE_CLI=(gh)
+else
+  echo "Error: neither gh-axi nor gh is installed; cannot create the release" >&2
+  exit 1
+fi
+
+"${RELEASE_CLI[@]}" release create "v${VERSION}" \
   --title "v${VERSION}" \
   --notes "$NOTES" \
   "${ARTIFACTS[@]}"

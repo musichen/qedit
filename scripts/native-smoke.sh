@@ -30,7 +30,7 @@ else
   fi
 fi
 
-LOG_FILE=$(mktemp "${TMPDIR:-/tmp}/qedit-native-smoke.XXXXXX.log")
+LOG_FILE=$(mktemp "${TMPDIR:-/tmp}/qedit-native-smoke.XXXXXXXXXX")
 PID=""
 cleanup() {
   if [[ -n "$PID" ]] && kill -0 "$PID" 2>/dev/null; then

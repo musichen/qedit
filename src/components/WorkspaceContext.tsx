@@ -40,7 +40,7 @@ interface WorkspaceContextValue {
   /** The single seam every file open goes through, so Recent stays in sync. */
   openWorkspaceFile: (filePath: string, displayName?: string) => Promise<void>;
   openRecentProject: (projectPath: string) => Promise<void>;
-  registerEntries: (entries: WorkspaceEntry[], sourceRoot?: string) => void;
+  registerEntries: (entries: WorkspaceEntry[], sourceRoot: string) => void;
   retryWorkspace: () => void;
 }
 
@@ -183,7 +183,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   );
 
   const registerEntries = useCallback(
-    (entries: WorkspaceEntry[], sourceRoot?: string) => {
+    (entries: WorkspaceEntry[], sourceRoot: string) => {
       setKnownFiles((previous) => {
         // A folder expansion can finish after the user switches workspaces.
         // Ignore that result so Quick Open never mixes two projects.

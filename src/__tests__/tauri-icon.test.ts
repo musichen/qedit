@@ -35,6 +35,9 @@ function packagedIcnsPng(icns: Buffer): Buffer {
   while (offset + 8 <= icns.length) {
     const type = icns.toString('ascii', offset, offset + 4);
     const length = icns.readUInt32BE(offset + 4);
+    if (length < 8) {
+      throw new Error('packaged macOS icon has a malformed ICNS chunk');
+    }
     const body = icns.subarray(offset + 8, offset + length);
     if (
       type === 'ic09' &&
