@@ -60,9 +60,11 @@ case "$(uname -s)" in
 esac
 
 declare -a ARTIFACTS=()
+# The DMG bundler stages writable rw.*.dmg images next to the final artifact;
+# they are never releasable, so exclude them even if a build left one behind.
 while IFS= read -r -d '' artifact; do
   ARTIFACTS+=("$artifact")
-done < <(find "$BUNDLE_DIR" -type f \( -name '*.dmg' -o -name '*.deb' -o -name '*.msi' \) -print0 2>/dev/null)
+done < <(find "$BUNDLE_DIR" -type f ! -name 'rw.*.dmg' \( -name '*.dmg' -o -name '*.deb' -o -name '*.msi' \) -print0 2>/dev/null)
 if [[ ${#ARTIFACTS[@]} -eq 0 ]]; then
   echo "Error: no release bundle was produced in $BUNDLE_DIR" >&2
   exit 1

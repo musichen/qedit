@@ -1,35 +1,85 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Tauri's default DMG bundler runs Finder AppleScript to arrange icons. That
-# requires an interactive GUI session and is unavailable in CI/headless hosts.
-# tauri-bundler skips that step when CI is set, so the dmg target stays
-# reproducible and valid on both developer machines and headless runners.
-#
-# The app target is requested explicitly: when only dmg is asked for, the
-# bundler treats qedit.app as a throwaway intermediate and deletes it in its
-# "Cleaning" step, so the .app assertion below (and smoke:native) would have
-# nothing left to inspect.
-CI=true pnpm exec tauri build --bundles app,dmg
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BUNDLE_DIR="$PROJECT_ROOT/src-tauri/target/release/bundle"
+BUILD_LOG="$(mktemp -t qedit-build-mac.XXXXXXXX)"
 
-APP_BUNDLE="src-tauri/target/release/bundle/macos/qedit.app"
-DMG_DIR="src-tauri/target/release/bundle/dmg"
+# create-dmg runs an optional "Finder-prettifying" AppleScript that needs a live
+# Finder plus Automation permission. Headless or unattended sessions (CI, ssh,
+# sandboxed agents) fail it with AppleEvent errors such as -1712 (timed out) or
+# -1719 (no assistive access), and create-dmg then aborts the whole DMG. That
+# step only positions icons, so it must never fail the build: retry with Tauri's
+# CI path, which passes --skip-jenkins to create-dmg and skips the AppleScript.
+# Tauri swallows bundle_dmg.sh output, so the only signal it leaves is the
+# generic "error running bundle_dmg.sh". Retrying on that is still safe: a
+# presentation-independent failure (hdiutil, mount, detach, compression) fails
+# the retry too, and the final DMG assertion below refuses a false success.
+DMG_STAGE_FAILURE_PATTERN='error running bundle_dmg\.sh|Failed running AppleScript|AppleEvent timed out|Not authorized to send Apple events|\(-1712\)|\(-1719\)|\(-1743\)'
 
-if [[ ! -d "$APP_BUNDLE" || ! -x "$APP_BUNDLE/Contents/MacOS/qedit" ]]; then
-  echo "macOS build: app bundle not found: $APP_BUNDLE" >&2
+cleanup_dmg_temps() {
+  if [[ -d "$BUNDLE_DIR" ]]; then
+    find "$BUNDLE_DIR" -type f -name 'rw.*.dmg' -exec rm -f {} +
+  fi
+}
+
+cleanup() {
+  cleanup_dmg_temps
+  rm -f "$BUILD_LOG"
+}
+
+trap cleanup EXIT
+cleanup_dmg_temps
+
+run_bundler() {
+  local status=0
+  if [[ "${1:-}" == "degraded" ]]; then
+    CI=true pnpm exec tauri build --bundles app,dmg 2>&1 | tee "$BUILD_LOG" || status=${PIPESTATUS[0]}
+  else
+    pnpm exec tauri build --bundles app,dmg 2>&1 | tee "$BUILD_LOG" || status=${PIPESTATUS[0]}
+  fi
+  return "$status"
+}
+
+cd "$PROJECT_ROOT"
+
+# tauri-bundler names the DMG after the tauri.conf.json version, and never
+# removes the finals of previous versions, so the assertion below has to look
+# for this build's artifact rather than count everything in the directory.
+APP_VERSION=$(node -p "JSON.parse(require('fs').readFileSync('src-tauri/tauri.conf.json', 'utf8')).version")
+
+if ! run_bundler; then
+  if grep -Eq "$DMG_STAGE_FAILURE_PATTERN" "$BUILD_LOG"; then
+    echo "warning: DMG creation failed inside bundle_dmg.sh, usually because create-dmg could not drive Finder (AppleEvents unavailable or timed out)." >&2
+    echo "warning: retrying with DMG presentation disabled; the DMG ships without custom icon positioning." >&2
+    cleanup_dmg_temps
+    if ! run_bundler degraded; then
+      echo "macOS bundling failed even with the DMG presentation step disabled." >&2
+      exit 1
+    fi
+  else
+    echo "macOS bundling failed." >&2
+    exit 1
+  fi
+fi
+
+APP_PATH="$BUNDLE_DIR/macos/qedit.app"
+if [[ ! -d "$APP_PATH" || ! -x "$APP_PATH/Contents/MacOS/qedit" ]]; then
+  echo "Expected macOS app bundle was not produced: $APP_PATH" >&2
   exit 1
 fi
 
-# Discover the artifact instead of predicting its name: tauri-bundler derives
-# the version from tauri.conf.json and labels the architecture itself (x64 on
-# Intel, aarch64 on Apple Silicon).
-declare -a DMGS=()
-while IFS= read -r -d '' dmg; do
-  DMGS+=("$dmg")
-done < <(find "$DMG_DIR" -maxdepth 1 -type f -name '*.dmg' -print0 2>/dev/null)
-if [[ ${#DMGS[@]} -eq 0 ]]; then
-  echo "macOS build: DMG not produced in $DMG_DIR" >&2
+shopt -s nullglob
+DMG_PATHS=()
+for candidate in "$BUNDLE_DIR"/dmg/*_"$APP_VERSION"_*.dmg; do
+  [[ "$(basename "$candidate")" == rw.*.dmg ]] && continue
+  DMG_PATHS+=("$candidate")
+done
+if (( ${#DMG_PATHS[@]} != 1 )); then
+  echo "Expected one final DMG bundle for version $APP_VERSION in $BUNDLE_DIR/dmg" >&2
   exit 1
 fi
 
-printf 'macOS build: %s\n' "${DMGS[@]}"
+echo "Finished macOS bundles:"
+echo "  $APP_PATH"
+echo "  ${DMG_PATHS[0]}"
