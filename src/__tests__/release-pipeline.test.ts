@@ -100,6 +100,29 @@ describe('release pipeline contract', () => {
     expect(workflow).toContain('QEDIT_REQUIRE_SIGNING');
     expect(workflow).toContain('Resolve macOS signing mode');
     expect(workflow).toContain("steps.macos-signing.outputs.enabled == 'true'");
+    expect(workflow).not.toContain(
+      "APPLE_SIGNING_IDENTITY: ${{ steps.macos-signing.outputs.enabled == 'true' && secrets.APPLE_SIGNING_IDENTITY || '' }}",
+    );
+    expect(workflow).not.toMatch(/APPLE_SIGNING_IDENTITY:\s*''/);
+    const signedBuild =
+      workflow.match(
+        /      - name: Build native bundle with macOS signing[\s\S]*?(?=\n      - name:)/,
+      )?.[0] ?? '';
+    expect(signedBuild).toContain(
+      "if: startsWith(matrix.target, 'macos-') && steps.macos-signing.outputs.enabled == 'true'",
+    );
+    expect(signedBuild).toContain(
+      'APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}',
+    );
+    const unsignedBuild =
+      workflow.match(
+        /      - name: Build native bundle unsigned macOS preview[\s\S]*?(?=\n      - name:)/,
+      )?.[0] ?? '';
+    expect(unsignedBuild).toContain(
+      "if: startsWith(matrix.target, 'macos-') && steps.macos-signing.outputs.enabled != 'true'",
+    );
+    expect(unsignedBuild).not.toMatch(/^\s+APPLE_SIGNING_IDENTITY:/m);
+    expect(unsignedBuild).not.toContain('\n        env:');
     expect(workflow).toContain('CI: true');
     expect(workflow).toContain('path: dist/release');
     expect(workflow).not.toContain('xdg-utils');
@@ -133,6 +156,7 @@ describe('release pipeline contract', () => {
 
     expect(source).toBe('files/xdg-open');
     expect(config.plugins.shell.open).toBe(true);
+    expect(JSON.stringify(config)).not.toContain('signingIdentity');
     expect(statSync(shimPath).mode & 0o111).not.toBe(0);
     expect(shim).toContain('/usr/bin/xdg-open');
     expect(shim).toContain('gio open');
@@ -160,6 +184,60 @@ describe('release pipeline contract', () => {
       );
       expect(readFileSync(join(root, 'provenance.json'), 'utf8')).toContain(
         'qedit',
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('fails closed when macOS signing is required but credentials are incomplete', () => {
+    const root = mkdtempSync(join(tmpdir(), 'qedit-signing-required-'));
+    const manifestPath = join(root, 'manifest.json');
+    const env = {
+      ...process.env,
+      QEDIT_REQUIRE_SIGNING: '1',
+      APPLE_CERTIFICATE: '',
+      APPLE_CERTIFICATE_PASSWORD: '',
+      APPLE_SIGNING_IDENTITY: 'Developer ID Application: stale identity',
+      APPLE_ID: '',
+      APPLE_PASSWORD: '',
+      APPLE_TEAM_ID: '',
+    };
+    try {
+      const prepare = spawnSync(
+        'bash',
+        [join(projectRoot, 'scripts/release-sign-prepare.sh'), 'macos-arm64'],
+        { cwd: projectRoot, encoding: 'utf8', env },
+      );
+      expect(prepare.status).not.toBe(0);
+      expect(`${prepare.stdout}${prepare.stderr}`).toContain(
+        'macOS signing is required',
+      );
+
+      writeFileSync(
+        manifestPath,
+        `${JSON.stringify({
+          schema: 1,
+          product: 'qedit',
+          version: '0.1.0',
+          target: 'macos-arm64',
+          host: 'test',
+          artifacts: [],
+        })}\n`,
+      );
+      const sign = spawnSync(
+        'bash',
+        [
+          join(projectRoot, 'scripts/release-sign.sh'),
+          'macos-arm64',
+          '0.1.0',
+          root,
+        ],
+        { cwd: projectRoot, encoding: 'utf8', env },
+      );
+      expect(sign.status).not.toBe(0);
+      expect(`${sign.stdout}${sign.stderr}`).toContain(
+        'macOS signing is required',
       );
     } finally {
       rmSync(root, { recursive: true, force: true });

@@ -103,12 +103,20 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           QEDIT_REQUIRE_SIGNING: ${{ env.QEDIT_REQUIRE_SIGNING }}
         run: bash scripts/release-sign-prepare.sh ${{ matrix.target }}
-      - name: Build native bundle
+      - name: Build native bundle with macOS signing
+        if: startsWith(matrix.target, 'macos-') && steps.macos-signing.outputs.enabled == 'true'
         env:
-          # Tauri codesigns during bundling when this is set. Only expose the
-          # identity after the complete credential set has been confirmed;
-          # otherwise the public preview must remain genuinely unsigned.
-          APPLE_SIGNING_IDENTITY: ${{ steps.macos-signing.outputs.enabled == 'true' && secrets.APPLE_SIGNING_IDENTITY || '' }}
+          # Tauri codesigns during bundling when this is set. This step runs
+          # only after the complete credential set has been confirmed.
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: pnpm run release:build -- ${{ matrix.target }} ${{ steps.version.outputs.version }}
+      - name: Build native bundle unsigned macOS preview
+        if: startsWith(matrix.target, 'macos-') && steps.macos-signing.outputs.enabled != 'true'
+        # Do not add an env block here: even an empty APPLE_SIGNING_IDENTITY
+        # makes Tauri invoke codesign during macOS bundling.
+        run: pnpm run release:build -- ${{ matrix.target }} ${{ steps.version.outputs.version }}
+      - name: Build native bundle for non-macOS target
+        if: ${{ !startsWith(matrix.target, 'macos-') }}
         run: pnpm run release:build -- ${{ matrix.target }} ${{ steps.version.outputs.version }}
       - name: Sign and notarize release bundle
         if: startsWith(matrix.target, 'macos-') || startsWith(matrix.target, 'windows-')
