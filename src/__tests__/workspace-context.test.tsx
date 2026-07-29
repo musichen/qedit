@@ -3,7 +3,10 @@ import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { EditorProvider, useEditor } from '../components/EditorContext';
-import { WorkspaceProvider, useWorkspace } from '../components/WorkspaceContext';
+import {
+  WorkspaceProvider,
+  useWorkspace,
+} from '../components/WorkspaceContext';
 
 import type { WorkspaceEntry } from '#/lib/workspace-bridge';
 

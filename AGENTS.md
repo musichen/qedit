@@ -39,11 +39,15 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 
 | Command | Scope |
 |---|---|
-| `pnpm run check` | Fast CI — lint, format, typecheck, tests, Vite build, + Rust compilation check |
+| `pnpm run check` | Fast CI — lint, format, typecheck, web tests, Rust tests, Vite build, + Rust compilation check |
 | `pnpm run check:native` | Rust-only: `cargo check` on the Tauri workspace (catches broken plugin configs, JSON errors, compilation failures without a full build) |
-| `cargo test --manifest-path src-tauri/Cargo.toml` | Rust unit tests (terminal/PTY behaviour). Spawns real shells via the `tauri` `test` feature; not part of `pnpm run check`, so run it explicitly when touching `src-tauri/src/**` |
+| `pnpm run test:native` | Rust unit tests (terminal/PTY behaviour) via `cargo test`. Spawns real shells through the `tauri` `test` feature; part of `pnpm run check` |
 | `pnpm run build:native` | Full Tauri native build (app bundle only, no DMG/installer) |
-| `pnpm run verify` | Full pipeline: `check` + native build + smoke launch test (runs the binary for 3s, kills it, fails if it panics) |
+| `pnpm run smoke:native` | `scripts/native-smoke.sh` — launches the built app, fails if it exits during startup or ignores SIGTERM. On macOS it launches the packaged `.app` and asserts the embedded `qedit.icns` matches the current artwork |
+| `pnpm run verify` | Full pipeline: `check` + `build:native` + `smoke:native` |
+| `pnpm run build:mac` | `scripts/build-mac.sh` — DMG release bundle. Sharp edge: it builds `app,dmg` and sets `CI=true`, because the dmg-only target deletes `qedit.app` as an intermediate and the default DMG bundler needs an interactive Finder session |
+| `pnpm run build:all` | Host bundle only (`scripts/build-all.sh`): Tauri cannot cross-build complete bundles, so CI must run it once per platform runner |
+| `pnpm run release <version>` | `scripts/release.sh` — refuses unless the version matches `package.json`, `tauri.conf.json`, and `Cargo.toml`; set `DRY_RUN=1` to stop before tagging |
 
 ## Constraints
 
