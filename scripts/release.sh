@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ "${1:-}" == -- ]]; then shift; fi
 VERSION="${1:-}"
 DRY_RUN="${DRY_RUN:-}"
-BUNDLE_DIR="src-tauri/target/release/bundle"
+ARTIFACT_ROOT="${QEDIT_RELEASE_ARTIFACTS:-$PROJECT_ROOT/dist/release/v${VERSION}}"
 
 if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
   echo "Usage: $0 <version>"
@@ -30,47 +32,47 @@ if [[ -z "$DRY_RUN" && -n "$(git status --porcelain --untracked-files=all)" ]]; 
   exit 1
 fi
 
-# Resolve the release CLI before anything is published: a missing CLI must not
-# be discovered after the tag has already been pushed to the remote. The CLI
-# must already be installed; fetching an unpinned package over the network at
-# publish time is not acceptable in the step that uploads artifacts.
+# Resolve the approved GitHub release CLI before anything is published. CI uses
+# npx because gh-axi is intentionally not a project dependency; local operators
+# should install gh-axi once so release publication does not fetch at runtime.
 if command -v gh-axi >/dev/null 2>&1; then
   RELEASE_CLI=(gh-axi)
-elif command -v gh >/dev/null 2>&1; then
-  RELEASE_CLI=(gh)
+elif command -v npx >/dev/null 2>&1; then
+  RELEASE_CLI=(npx -y gh-axi)
 else
-  echo "Error: neither gh-axi nor gh is installed; cannot create the release" >&2
+  echo "Error: gh-axi is required to create the GitHub release (install gh-axi or npx)" >&2
   exit 1
 fi
 
-echo ""
-echo "=== Running check pipeline ==="
-pnpm run verify
+echo "=== qedit v${VERSION} release plan ==="
+echo "Native build targets: macos-arm64 macos-x64 windows-arm64 windows-x64 linux-arm64 linux-x64"
+echo "Release root: $ARTIFACT_ROOT"
+if [[ -n "$DRY_RUN" ]]; then
+  echo "dry-run: no build, tag, branch push, upload, or GitHub release will be performed"
+  exit 0
+fi
 
-# Remove ignored bundle output before building so a failed or partial build can
-# never cause an older artifact to be attached to this release.
-rm -rf "$BUNDLE_DIR"
-echo ""
-echo "=== Building the host release bundle ==="
-case "$(uname -s)" in
-  Darwin) pnpm run build:mac ;;
-  Linux) pnpm run build:linux ;;
-  MINGW*|MSYS*|CYGWIN*) pnpm run build:win ;;
-  *) echo "Unsupported release host: $(uname -s)" >&2; exit 1 ;;
-esac
+if [[ ! -d "$ARTIFACT_ROOT" ]]; then
+  echo "Error: complete CI artifact matrix is missing: $ARTIFACT_ROOT" >&2
+  echo "Build each target with 'pnpm run release:build -- <target> <version>' on its native runner, then retry." >&2
+  exit 1
+fi
+QEDIT_REQUIRE_SIGNED=1 bash "$PROJECT_ROOT/scripts/release-verify.sh" all "$VERSION" "$ARTIFACT_ROOT"
 
-declare -a ARTIFACTS=()
-# The DMG bundler stages writable rw.*.dmg images next to the final artifact;
-# they are never releasable, so exclude them even if a build left one behind.
-while IFS= read -r -d '' artifact; do
-  ARTIFACTS+=("$artifact")
-done < <(find "$BUNDLE_DIR" -type f ! -name 'rw.*.dmg' \( -name '*.dmg' -o -name '*.deb' -o -name '*.msi' \) -print0 2>/dev/null)
-if [[ ${#ARTIFACTS[@]} -eq 0 ]]; then
-  echo "Error: no release bundle was produced in $BUNDLE_DIR" >&2
+BRANCH=$(git branch --show-current)
+if [[ -z "$BRANCH" || "$BRANCH" == main || "$BRANCH" == master ]]; then
+  echo "Error: publish must run from a non-default release branch; current branch: ${BRANCH:-detached}" >&2
+  exit 1
+fi
+if git ls-remote --exit-code --refs origin "refs/tags/v${VERSION}" >/dev/null 2>&1; then
+  echo "Error: remote tag v${VERSION} already exists; refusing to overwrite a release" >&2
+  exit 1
+fi
+if git show-ref --verify --quiet "refs/tags/v${VERSION}"; then
+  echo "Error: local tag v${VERSION} already exists; refusing to overwrite a release" >&2
   exit 1
 fi
 
-echo ""
 echo "=== Generating release notes ==="
 LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
 if [[ -n "$LAST_TAG" ]]; then
@@ -97,26 +99,28 @@ echo ""
 echo "=== Release candidate ==="
 echo "Tag: v${VERSION}"
 echo "Artifacts:"
-printf '  %s\n' "${ARTIFACTS[@]}"
-if [[ -n "$DRY_RUN" ]]; then
-  echo ""
-  echo "Release notes:"
-  echo "$NOTES"
-  exit 0
-fi
+find "$ARTIFACT_ROOT" -maxdepth 2 -type f \( -name 'qedit-v*' -o -name 'SHA256SUMS' -o -name 'provenance.json' \) -print | sort
 
 echo ""
 echo "=== Creating tag v${VERSION} ==="
+git push origin "HEAD:refs/heads/release/v${VERSION}"
 git tag -a "v${VERSION}" -m "Release v${VERSION}"
 git push origin "v${VERSION}"
 
 echo ""
 echo "=== Creating GitHub release ==="
-# Arrays preserve artifact paths and release notes without eval or shell
-# interpolation surprises.
+declare -a ARTIFACTS=()
+while IFS= read -r -d '' artifact; do ARTIFACTS+=("$artifact"); done < <(
+  find "$ARTIFACT_ROOT" -type f ! -name 'rw.*.dmg' \( -name 'qedit-v*.app.zip' -o -name 'qedit-v*.dmg' -o -name 'qedit-v*.msi' -o -name 'qedit-v*.exe' -o -name 'qedit-v*.deb' -o -name 'qedit-v*.AppImage' -o -name 'SHA256SUMS' -o -name 'provenance.json' \) -print0 | sort -z
+)
+if (( ${#ARTIFACTS[@]} != 14 )); then
+  echo "Error: expected 12 platform artifacts plus SHA256SUMS and provenance.json, found ${#ARTIFACTS[@]}" >&2
+  exit 1
+fi
 "${RELEASE_CLI[@]}" release create "v${VERSION}" \
   --title "v${VERSION}" \
   --notes "$NOTES" \
+  --verify-tag \
   "${ARTIFACTS[@]}"
 
 echo ""

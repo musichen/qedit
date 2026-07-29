@@ -52,6 +52,8 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 | `pnpm run build:all` | Host bundle only (`scripts/build-all.sh`): Tauri cannot cross-build complete bundles, so CI must run it once per platform runner |
 | `pnpm run release <version>` | `scripts/release.sh` — refuses unless the version matches `package.json`, `tauri.conf.json`, and `Cargo.toml`; set `DRY_RUN=1` to stop before tagging |
 
+Release matrix: `scripts/release-build.sh` only accepts a native Rust host triple for each target (`macos-{arm64,x64}`, `windows-{arm64,x64}`, `linux-{arm64,x64}`), then writes deterministic artifacts below `dist/release/v<version>/<target>`. `scripts/release-sign-prepare.sh` installs the macOS identity before Tauri creates the DMG; `scripts/release-sign.sh` records signed/unsigned status and blocks the publish workflow when required credentials are absent. `scripts/release-verify.sh all` refuses incomplete or stale matrices and emits `SHA256SUMS` plus deterministic provenance. The authoritative hosted-runner matrix and publish flow are `.github/workflows/release.yml`; local publication uses `scripts/release.sh` and `gh-axi`.
+
 ## Constraints
 
 - TypeScript strict mode throughout (`strict: true`, `noUnusedLocals`, `noUnusedParameters`).

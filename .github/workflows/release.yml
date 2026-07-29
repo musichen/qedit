@@ -1,0 +1,186 @@
+name: Release qedit
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semver version already present in package.json, tauri.conf.json, and Cargo.toml
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+env:
+  PNPM_VERSION: 11.15.1
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: macos-arm64
+            runner: macos-14
+          - target: macos-x64
+            runner: macos-15-intel
+          - target: windows-arm64
+            runner: windows-11-arm
+          - target: windows-x64
+            runner: windows-2022
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+          - target: linux-x64
+            runner: ubuntu-24.04
+
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux dependencies
+        if: startsWith(matrix.target, 'linux-')
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            build-essential curl wget file libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev patchelf
+      - run: pnpm install --frozen-lockfile
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='${{ inputs.version }}'
+          if [[ -z "$version" ]]; then version="${GITHUB_REF_NAME#v}"; fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Prepare macOS signing identity before DMG creation
+        if: startsWith(matrix.target, 'macos-')
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash scripts/release-sign-prepare.sh ${{ matrix.target }}
+      - name: Build native bundle
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: pnpm run release:build -- ${{ matrix.target }} ${{ steps.version.outputs.version }}
+      - name: Sign and notarize release bundle
+        if: startsWith(matrix.target, 'macos-') || startsWith(matrix.target, 'windows-')
+        shell: bash
+        env:
+          QEDIT_REQUIRE_SIGNING: '1'
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_TIMESTAMP_URL: ${{ secrets.WINDOWS_TIMESTAMP_URL }}
+        run: pnpm run release:sign -- ${{ matrix.target }} ${{ steps.version.outputs.version }}
+      - name: Mark Linux bundle unsigned by design
+        if: startsWith(matrix.target, 'linux-')
+        shell: bash
+        run: pnpm run release:sign -- ${{ matrix.target }} ${{ steps.version.outputs.version }}
+      - name: Verify target bundle
+        shell: bash
+        env:
+          QEDIT_REQUIRE_SIGNED: '1'
+        run: pnpm run release:verify -- ${{ matrix.target }} ${{ steps.version.outputs.version }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qedit-${{ steps.version.outputs.version }}-${{ matrix.target }}
+          path: dist/release
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Verify matrix and publish GitHub release
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist/release
+          pattern: qedit-*
+          merge-multiple: true
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='${{ inputs.version }}'
+          if [[ -z "$version" ]]; then version="${GITHUB_REF_NAME#v}"; fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Verify complete signed matrix and produce checksums/provenance
+        shell: bash
+        env:
+          QEDIT_REQUIRE_SIGNED: '1'
+        run: |
+          set -euo pipefail
+          root="dist/release/v${{ steps.version.outputs.version }}"
+          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"
+          QEDIT_REQUIRE_SIGNED=1 bash scripts/release-verify.sh all "${{ steps.version.outputs.version }}" "$root"
+      - name: Attest release subjects
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/release/v${{ steps.version.outputs.version }}/**/*.app.zip
+            dist/release/v${{ steps.version.outputs.version }}/**/*.dmg
+            dist/release/v${{ steps.version.outputs.version }}/**/*.msi
+            dist/release/v${{ steps.version.outputs.version }}/**/*-nsis.exe
+            dist/release/v${{ steps.version.outputs.version }}/**/*.deb
+            dist/release/v${{ steps.version.outputs.version }}/**/*.AppImage
+      - name: Create release branch and tag for manual dispatches
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='${{ steps.version.outputs.version }}'
+          if ! git ls-remote --exit-code --refs origin "refs/tags/v$version" >/dev/null 2>&1; then
+            git push origin "HEAD:refs/heads/release/v$version"
+            git tag -a "v$version" -m "Release v$version"
+            git push origin "v$version"
+          fi
+      - name: Generate release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='${{ steps.version.outputs.version }}'
+          last_tag=$(git describe --tags --abbrev=0 "v$version^" 2>/dev/null || true)
+          if [[ -n "$last_tag" ]]; then changes=$(git log "$last_tag..HEAD" --pretty=format:'- %s (%an)'); else changes=$(git log --pretty=format:'- %s (%an)'); fi
+          { echo "# v$version"; echo; echo '## What''s New'; echo "$changes"; echo; echo '## Verification'; echo '- Six native runner targets built and verified.'; echo '- SHA256SUMS and SLSA-style provenance attached.'; } > "dist/release/v$version/RELEASE_NOTES.md"
+      - name: Publish with gh-axi
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version='${{ steps.version.outputs.version }}'
+          root="dist/release/v$version"
+          assets=("$root/SHA256SUMS" "$root/provenance.json")
+          while IFS= read -r -d '' file; do assets+=("$file"); done < <(find "$root" -type f \( -name 'qedit-v*.app.zip' -o -name 'qedit-v*.dmg' -o -name 'qedit-v*.msi' -o -name 'qedit-v*.exe' -o -name 'qedit-v*.deb' -o -name 'qedit-v*.AppImage' \) -print0 | sort -z)
+          npx -y gh-axi release create "v$version" --verify-tag --title "v$version" --notes-file "$root/RELEASE_NOTES.md" "${assets[@]}"
