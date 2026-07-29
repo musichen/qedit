@@ -223,13 +223,28 @@ fn terminal_environment(cwd: &Path, cols: u16, rows: u16) -> Vec<(&'static str, 
     ]
 }
 
-fn shell_command_builder(shell: OsString, cwd: &Path, cols: u16, rows: u16) -> CommandBuilder {
+fn shell_command_builder(
+    shell: OsString,
+    cwd: &Path,
+    cols: u16,
+    rows: u16,
+    home_override: Option<&OsStr>,
+) -> CommandBuilder {
     let mut command = CommandBuilder::new(&shell);
     command.args(shell_arguments(&shell));
     command.cwd(cwd);
     command.env("SHELL", &shell);
     for (key, value) in terminal_environment(cwd, cols, rows) {
         command.env(key, value);
+    }
+    // Test-only: point HOME/ZDOTDIR at an isolated, dotfile-free directory so
+    // regression probes exercise qedit's login/interactive argv and env
+    // contract without depending on (and potentially hanging on) whatever
+    // shell-integration hooks the developer's real dotfiles happen to source.
+    // Production callers never pass this, so real sessions are unaffected.
+    if let Some(home) = home_override {
+        command.env("HOME", home);
+        command.env("ZDOTDIR", home);
     }
     command
 }
@@ -242,7 +257,7 @@ fn terminal_spawn<R: Runtime>(
     cols: u16,
     rows: u16,
 ) -> Result<u32, String> {
-    terminal_spawn_with_shell(app, state, cwd, cols, rows, shell_command())
+    terminal_spawn_with_shell(app, state, cwd, cols, rows, shell_command(), None)
 }
 
 fn terminal_spawn_with_shell<R: Runtime>(
@@ -252,6 +267,7 @@ fn terminal_spawn_with_shell<R: Runtime>(
     cols: u16,
     rows: u16,
     shell: OsString,
+    home_override: Option<OsString>,
 ) -> Result<u32, String> {
     let cwd = safe_home_path(&cwd)?;
     let pty = native_pty_system()
@@ -262,7 +278,7 @@ fn terminal_spawn_with_shell<R: Runtime>(
             pixel_height: 0,
         })
         .map_err(|error| format!("Could not create terminal: {error}"))?;
-    let command = shell_command_builder(shell, &cwd, cols, rows);
+    let command = shell_command_builder(shell, &cwd, cols, rows, home_override.as_deref());
     let mut child = pty
         .slave
         .spawn_command(command)
@@ -597,6 +613,24 @@ mod tests {
             .is_some_and(|value| !value.is_empty()));
     }
 
+    /// Create an empty, dotfile-free directory to use as a probe shell's HOME.
+    /// Real developer dotfiles (~/.bash_profile, ~/.zshrc, ...) may source
+    /// third-party shell-integration hooks that expect a live terminal
+    /// handshake; under the test PTY harness that handshake never arrives,
+    /// so the shell can hang before ever reaching the injected probe command.
+    /// Isolating HOME (and ZDOTDIR, which zsh also honors) sidesteps that
+    /// without touching the login/interactive argv or environment contract
+    /// under test.
+    fn isolated_home() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "qedit-test-home-{}-{}",
+            std::process::id(),
+            Instant::now().elapsed().as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).expect("should create isolated home");
+        dir
+    }
+
     #[cfg(unix)]
     #[test]
     fn bash_and_zsh_start_as_interactive_login_shells_with_terminal_environment() {
@@ -613,6 +647,7 @@ mod tests {
                 let _ = output_tx.send(data.as_str().unwrap_or_default().to_string());
             });
 
+            let home = isolated_home();
             let session_id = terminal_spawn_with_shell(
                 handle.clone(),
                 handle.state::<SharedTerminalState>(),
@@ -620,6 +655,7 @@ mod tests {
                 80,
                 24,
                 OsString::from(shell),
+                Some(home.clone().into_os_string()),
             )
             .expect("shell should spawn");
             terminal_write(
@@ -645,6 +681,7 @@ mod tests {
             );
             terminal_close(handle.state::<SharedTerminalState>(), session_id)
                 .expect("shell should close");
+            let _ = std::fs::remove_dir_all(&home);
         }
     }
 
