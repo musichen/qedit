@@ -156,6 +156,13 @@ function EditorLayout() {
   }, [handleKeyDown]);
 
   useEffect(() => {
+    const showSearch = () => setQuickOpenVisible(true);
+    window.addEventListener('qedit:quick-open', showSearch);
+
+    return () => window.removeEventListener('qedit:quick-open', showSearch);
+  }, []);
+
+  useEffect(() => {
     const message = () => {
       const { dirtyTabCount: count } = dirtyStateRef.current;
 

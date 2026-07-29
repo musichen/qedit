@@ -3,14 +3,18 @@ import {
   ChevronRight,
   Clock,
   File,
+  FilePlus,
   FilePlus2,
   Folder,
   FolderOpen,
   FolderPlus,
   Home,
+  Pencil,
   RefreshCw,
+  Search,
+  Trash2,
 } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { useEditor } from './EditorContext';
 import { useWorkspace } from './WorkspaceContext';
@@ -32,6 +36,11 @@ export function FileTree() {
     error,
     openFileDialog,
     openFolderDialog,
+    createFile,
+    renameFile,
+    deleteFile,
+    refreshWorkspace,
+    workspaceVersion,
     openWorkspaceFile,
     openRecentProject,
     registerEntries,
@@ -61,6 +70,24 @@ export function FileTree() {
             title="Open File (Cmd/Ctrl+O)"
           >
             <FilePlus2 className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            onClick={() => void createFile()}
+            aria-label="New file"
+            title="New File in Workspace"
+          >
+            <FilePlus className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            onClick={() => window.dispatchEvent(new Event('qedit:quick-open'))}
+            aria-label="Search files"
+            title="Search Files (Cmd/Ctrl+P)"
+          >
+            <Search className="h-3.5 w-3.5" />
           </button>
           <button
             type="button"
@@ -147,6 +174,15 @@ export function FileTree() {
                 <span className="truncate" title={workspaceRoot}>
                   {basenameFromPath(workspaceRoot)}
                 </span>
+                <button
+                  type="button"
+                  className="ml-auto rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  onClick={() => void refreshWorkspace()}
+                  aria-label="Refresh workspace"
+                  title="Refresh Workspace"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                </button>
               </>
             ) : (
               <span>Workspace</span>
@@ -189,6 +225,24 @@ export function FileTree() {
                     onEntriesLoaded={(entries) =>
                       registerEntries(entries, workspaceRoot)
                     }
+                    refreshVersion={workspaceVersion}
+                    onRename={(filePath) => {
+                      const currentName = basenameFromPath(filePath);
+                      const nextName = window.prompt(
+                        `Rename ${currentName}`,
+                        currentName,
+                      );
+                      if (nextName !== null)
+                        void renameFile(filePath, nextName);
+                    }}
+                    onDelete={(filePath) => {
+                      const name = basenameFromPath(filePath);
+                      if (
+                        window.confirm(`Delete ${name}? This cannot be undone.`)
+                      ) {
+                        void deleteFile(filePath);
+                      }
+                    }}
                   />
                 ))}
               </div>
@@ -206,12 +260,18 @@ function TreeNode({
   activeFilePath,
   onOpenFile,
   onEntriesLoaded,
+  refreshVersion,
+  onRename,
+  onDelete,
 }: {
   entry: WorkspaceEntry;
   depth: number;
   activeFilePath: string | null;
   onOpenFile: (path: string, name: string) => void;
   onEntriesLoaded: (entries: WorkspaceEntry[]) => void;
+  refreshVersion: number;
+  onRename: (path: string) => void;
+  onDelete: (path: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [children, setChildren] = useState<WorkspaceEntry[] | null>(null);
@@ -232,6 +292,10 @@ function TreeNode({
       setLoadingChildren(false);
     }
   }, [entry.path, onEntriesLoaded]);
+
+  useEffect(() => {
+    if (expanded) void loadChildren();
+  }, [expanded, loadChildren, refreshVersion]);
 
   const handleToggle = useCallback(async () => {
     if (!entry.isDirectory) {
@@ -289,6 +353,34 @@ function TreeNode({
         {loadingChildren && (
           <span className="ml-auto text-[10px] text-muted-foreground">...</span>
         )}
+        {entry.isFile && (
+          <span className="ml-auto hidden items-center gap-0.5 group-hover:flex group-focus-within:flex">
+            <button
+              type="button"
+              className="rounded p-0.5 hover:bg-muted-foreground/20"
+              onClick={(event) => {
+                event.stopPropagation();
+                onRename(entry.path);
+              }}
+              aria-label={`Rename ${entry.name}`}
+              title={`Rename ${entry.name}`}
+            >
+              <Pencil className="h-3 w-3" />
+            </button>
+            <button
+              type="button"
+              className="rounded p-0.5 text-destructive hover:bg-destructive/10"
+              onClick={(event) => {
+                event.stopPropagation();
+                onDelete(entry.path);
+              }}
+              aria-label={`Delete ${entry.name}`}
+              title={`Delete ${entry.name}`}
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </span>
+        )}
       </div>
       {expanded && entry.isDirectory && (
         <div role="group">
@@ -317,6 +409,9 @@ function TreeNode({
                 activeFilePath={activeFilePath}
                 onOpenFile={onOpenFile}
                 onEntriesLoaded={onEntriesLoaded}
+                refreshVersion={refreshVersion}
+                onRename={onRename}
+                onDelete={onDelete}
               />
             ))
           )}

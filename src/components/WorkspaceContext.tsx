@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -20,6 +21,10 @@ import {
   openNativeFile,
   openNativeFolder,
   readWorkspaceDirectory,
+  readWorkspaceFiles,
+  createNativeFile,
+  renameNativeFile,
+  removeNativeFile,
   type WorkspaceEntry,
   WorkspaceBridgeError,
 } from '#/lib/workspace-bridge';
@@ -41,6 +46,12 @@ interface WorkspaceContextValue {
   openWorkspaceFile: (filePath: string, displayName?: string) => Promise<void>;
   openRecentProject: (projectPath: string) => Promise<void>;
   registerEntries: (entries: WorkspaceEntry[], sourceRoot: string) => void;
+  createFile: () => Promise<void>;
+  renameFile: (filePath: string, nextName: string) => Promise<void>;
+  deleteFile: (filePath: string) => Promise<void>;
+  discoverWorkspaceFiles: () => Promise<void>;
+  refreshWorkspace: () => Promise<void>;
+  workspaceVersion: number;
   retryWorkspace: () => void;
 }
 
@@ -57,10 +68,12 @@ async function assertSafePath(path: string): Promise<void> {
 }
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const { openFile, closeAllTabs } = useEditor();
+  const { openFile, openTabs, closeTab, closeAllTabs, renameFilePath } =
+    useEditor();
   const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null);
   const [rootEntries, setRootEntries] = useState<WorkspaceEntry[]>([]);
   const [knownFiles, setKnownFiles] = useState<WorkspaceEntry[]>([]);
+  const [workspaceVersion, setWorkspaceVersion] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recentFiles, setRecentFiles] = useState<RecentFile[]>(() =>
@@ -97,6 +110,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
           setRootEntries(entries);
           setKnownFiles(entries.filter((entry) => entry.isFile));
+          setWorkspaceVersion((version) => version + 1);
           setLoading(false);
         },
         (cause: unknown) => {
@@ -205,6 +219,145 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const refreshWorkspace = useCallback(async () => {
+    const root = workspaceRootRef.current;
+    if (!root) return;
+
+    const generation = ++loadGeneration.current;
+    setLoading(true);
+    setError(null);
+
+    try {
+      const entries = await readWorkspaceDirectory(root);
+      if (generation !== loadGeneration.current) return;
+
+      setRootEntries(entries);
+      setKnownFiles(entries.filter((entry) => entry.isFile));
+      setWorkspaceVersion((version) => version + 1);
+      setLoading(false);
+    } catch (cause) {
+      if (generation !== loadGeneration.current) return;
+
+      setLoading(false);
+      setError(errorMessage(cause));
+    }
+  }, []);
+
+  const discoverWorkspaceFiles = useCallback(async () => {
+    const root = workspaceRootRef.current;
+    if (!root) return;
+
+    try {
+      const files = await readWorkspaceFiles(root);
+      if (workspaceRootRef.current !== root) return;
+      setKnownFiles((previous) => {
+        const next = new Map(previous.map((entry) => [entry.path, entry]));
+        for (const entry of files) next.set(entry.path, entry);
+
+        return [...next.values()];
+      });
+    } catch (cause) {
+      setError(errorMessage(cause));
+    }
+  }, []);
+
+  const createFile = useCallback(async () => {
+    const root = workspaceRootRef.current;
+    if (!root) {
+      setError('Open a folder before creating a file.');
+
+      return;
+    }
+
+    setError(null);
+
+    try {
+      const filePath = await createNativeFile(root);
+      if (!filePath) return;
+
+      await refreshWorkspace();
+      openFile(filePath, basenameFromPath(filePath));
+      refreshRecent();
+    } catch (cause) {
+      setError(errorMessage(cause));
+    }
+  }, [openFile, refreshRecent, refreshWorkspace]);
+
+  const renameFile = useCallback(
+    async (filePath: string, nextName: string) => {
+      const root = workspaceRootRef.current;
+      const trimmedName = nextName.trim();
+
+      if (!root) {
+        setError('Open a folder before renaming a file.');
+
+        return;
+      }
+      if (!trimmedName || trimmedName === '.' || trimmedName === '..') {
+        setError('Enter a valid file name.');
+
+        return;
+      }
+      if (/[\\/]/.test(trimmedName)) {
+        setError('File names cannot contain a path separator.');
+
+        return;
+      }
+
+      const separator = filePath.includes('\\') ? '\\' : '/';
+      const parent = filePath.slice(0, filePath.lastIndexOf(separator));
+      const targetPath = `${parent}${separator}${trimmedName}`;
+
+      setError(null);
+      try {
+        await renameNativeFile(filePath, targetPath);
+        renameFilePath(filePath, targetPath);
+        db.removeRecentFile(filePath);
+        db.addRecentFile(targetPath, trimmedName);
+        await refreshWorkspace();
+        refreshRecent();
+      } catch (cause) {
+        setError(errorMessage(cause));
+      }
+    },
+    [refreshRecent, refreshWorkspace, renameFilePath],
+  );
+
+  const deleteFile = useCallback(
+    async (filePath: string) => {
+      setError(null);
+
+      try {
+        const openTab = openTabs.find((tab) => tab.path === filePath);
+        if (
+          openTab?.isModified &&
+          !window.confirm(
+            `${openTab.name} has unsaved changes. Delete it and discard them?`,
+          )
+        ) {
+          return;
+        }
+
+        await removeNativeFile(filePath);
+        if (openTab) closeTab(filePath, true);
+        db.removeRecentFile(filePath);
+        await refreshWorkspace();
+        refreshRecent();
+      } catch (cause) {
+        setError(errorMessage(cause));
+      }
+    },
+    [closeTab, openTabs, refreshRecent, refreshWorkspace],
+  );
+
+  useEffect(() => {
+    const handleRefresh = () => void refreshWorkspace();
+    window.addEventListener('qedit:workspace-refresh', handleRefresh);
+
+    return () =>
+      window.removeEventListener('qedit:workspace-refresh', handleRefresh);
+  }, [refreshWorkspace]);
+
   const retryWorkspace = useCallback(() => {
     if (workspaceRoot) loadWorkspace(workspaceRoot);
   }, [loadWorkspace, workspaceRoot]);
@@ -223,6 +376,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       openWorkspaceFile,
       openRecentProject,
       registerEntries,
+      createFile,
+      renameFile,
+      deleteFile,
+      discoverWorkspaceFiles,
+      refreshWorkspace,
+      workspaceVersion,
       retryWorkspace,
     }),
     [
@@ -238,6 +397,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       openWorkspaceFile,
       openRecentProject,
       registerEntries,
+      createFile,
+      renameFile,
+      deleteFile,
+      discoverWorkspaceFiles,
+      refreshWorkspace,
+      workspaceVersion,
       retryWorkspace,
     ],
   );

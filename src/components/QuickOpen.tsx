@@ -12,11 +12,18 @@ interface QuickEntry {
 }
 
 export function QuickOpen({ onClose }: { onClose: () => void }) {
-  const { knownFiles, recentFiles, openWorkspaceFile } = useWorkspace();
+  const {
+    knownFiles,
+    recentFiles,
+    openWorkspaceFile,
+    discoverWorkspaceFiles,
+    workspaceRoot,
+  } = useWorkspace();
   const inputRef = useRef<HTMLInputElement>(null);
   const optionRefs = useRef(new Map<string, HTMLButtonElement>());
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [discovering, setDiscovering] = useState(false);
 
   const entries = useMemo<QuickEntry[]>(() => {
     const byPath = new Map<string, QuickEntry>();
@@ -52,7 +59,11 @@ export function QuickOpen({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     inputRef.current?.focus();
-  }, []);
+    if (!workspaceRoot) return;
+
+    setDiscovering(true);
+    void discoverWorkspaceFiles().finally(() => setDiscovering(false));
+  }, [discoverWorkspaceFiles, workspaceRoot]);
 
   useEffect(() => {
     setSelectedIndex(0);
@@ -94,7 +105,7 @@ export function QuickOpen({ onClose }: { onClose: () => void }) {
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-[15vh]"
       onClick={onClose}
       role="dialog"
-      aria-label="Quick open"
+      aria-label="Search files"
     >
       <div
         className="w-full max-w-lg rounded-lg border bg-background shadow-xl"
@@ -103,6 +114,9 @@ export function QuickOpen({ onClose }: { onClose: () => void }) {
         aria-label="Files"
       >
         <div className="border-b px-3 py-2">
+          <div className="mb-1 text-xs font-semibold text-muted-foreground">
+            Search files
+          </div>
           <input
             ref={inputRef}
             type="text"
@@ -163,7 +177,11 @@ export function QuickOpen({ onClose }: { onClose: () => void }) {
           id="qedit-quick-open-options"
           className="max-h-64 overflow-auto p-1"
         >
-          {filtered.length === 0 ? (
+          {discovering ? (
+            <p className="px-2 py-4 text-center text-xs text-muted-foreground">
+              Searching workspace...
+            </p>
+          ) : filtered.length === 0 ? (
             <p className="px-2 py-4 text-center text-xs text-muted-foreground">
               {query ? 'No matching files' : 'No recent or workspace files'}
             </p>

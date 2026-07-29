@@ -138,11 +138,12 @@ export async function openNativeFolder(): Promise<string | null> {
 
 export async function saveNativeFile(
   defaultPath?: string,
+  title = 'Save File As',
 ): Promise<string | null> {
   try {
     const { save } = await import('@tauri-apps/plugin-dialog');
     const result = await save({
-      title: 'Save File As',
+      title,
       defaultPath,
     });
 
@@ -152,6 +153,108 @@ export async function saveNativeFile(
 
     throw new WorkspaceBridgeError(
       `Could not open save dialog: ${errorMessage(cause)}`,
+      { cause },
+    );
+  }
+}
+
+function assertWorkspacePath(path: string, workspaceRoot: string): string {
+  if (!isPathWithinHome(path, workspaceRoot)) {
+    throw new WorkspaceBridgeError(
+      'For safety, new files must stay inside the open workspace.',
+    );
+  }
+
+  if (normalizePath(path) === normalizePath(workspaceRoot)) {
+    throw new WorkspaceBridgeError('Choose a file name inside the workspace.');
+  }
+
+  return path;
+}
+
+/** Pick and create a new empty file inside the currently open workspace. */
+export async function createNativeFile(
+  workspaceRoot: string,
+): Promise<string | null> {
+  const selected = await saveNativeFile(
+    `${workspaceRoot}/untitled.md`,
+    'New File',
+  );
+
+  if (!selected) return null;
+
+  const path = assertWorkspacePath(selected, workspaceRoot);
+
+  try {
+    const { exists } = await import('@tauri-apps/plugin-fs');
+
+    if (await exists(path)) {
+      throw new WorkspaceBridgeError(
+        `A file named ${basenameFromPath(path)} already exists.`,
+      );
+    }
+
+    const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+    await writeTextFile(path, '');
+
+    return path;
+  } catch (cause) {
+    if (cause instanceof WorkspaceBridgeError) throw cause;
+
+    throw new WorkspaceBridgeError(
+      `Could not create ${path}: ${errorMessage(cause)}`,
+      { cause },
+    );
+  }
+}
+
+export async function renameNativeFile(
+  oldPath: string,
+  newPath: string,
+): Promise<void> {
+  await assertHomePath(oldPath);
+  await assertHomePath(newPath);
+
+  try {
+    const { exists, rename } = await import('@tauri-apps/plugin-fs');
+
+    if (
+      normalizePath(oldPath) !== normalizePath(newPath) &&
+      (await exists(newPath))
+    ) {
+      throw new WorkspaceBridgeError(
+        `A file named ${basenameFromPath(newPath)} already exists.`,
+      );
+    }
+
+    await rename(oldPath, newPath);
+  } catch (cause) {
+    if (cause instanceof WorkspaceBridgeError) throw cause;
+
+    throw new WorkspaceBridgeError(
+      `Could not rename ${oldPath}: ${errorMessage(cause)}`,
+      { cause },
+    );
+  }
+}
+
+export async function removeNativeFile(filePath: string): Promise<void> {
+  await assertHomePath(filePath);
+
+  try {
+    const { stat, remove } = await import('@tauri-apps/plugin-fs');
+    const info = await stat(filePath);
+
+    if (!info.isFile) {
+      throw new WorkspaceBridgeError('Only files can be deleted from qedit.');
+    }
+
+    await remove(filePath);
+  } catch (cause) {
+    if (cause instanceof WorkspaceBridgeError) throw cause;
+
+    throw new WorkspaceBridgeError(
+      `Could not delete ${filePath}: ${errorMessage(cause)}`,
       { cause },
     );
   }
@@ -199,6 +302,23 @@ export async function readWorkspaceDirectory(
       { cause },
     );
   }
+}
+
+/** Recursively discover visible files for workspace search and Quick Open. */
+export async function readWorkspaceFiles(
+  directoryPath: string,
+): Promise<WorkspaceEntry[]> {
+  const entries = await readWorkspaceDirectory(directoryPath);
+  const files: WorkspaceEntry[] = [];
+
+  for (const entry of entries) {
+    if (entry.isFile) files.push(entry);
+    if (entry.isDirectory) {
+      files.push(...(await readWorkspaceFiles(entry.path)));
+    }
+  }
+
+  return files;
 }
 
 export async function readNativeTextFile(filePath: string): Promise<string> {
