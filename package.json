@@ -10,6 +10,7 @@
     "turbo": "turbo",
     "dev": "vite dev",
     "build": "vite build",
+    "website:build": "pnpm --filter @qedit/website build",
     "preview": "vite preview",
     "generate-routes": "tsr generate",
     "check": "pnpm run lint && pnpm run lint:shell && pnpm run format && pnpm run typecheck && pnpm run test && pnpm run test:native && pnpm run build && pnpm run check:native",
