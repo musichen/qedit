@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ffi::{OsStr, OsString};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -81,15 +82,104 @@ fn stop_child(child: &mut Box<dyn Child + Send + Sync>) {
     let _ = child.wait();
 }
 
-fn shell_command() -> Result<String, String> {
+fn configured_shell(shell: Option<&OsStr>, account_shell: Option<&OsStr>) -> OsString {
+    shell
+        .filter(|value| !value.is_empty())
+        .or_else(|| account_shell.filter(|value| !value.is_empty()))
+        .map(OsStr::to_os_string)
+        .unwrap_or_else(|| {
+            #[cfg(target_os = "windows")]
+            {
+                OsString::from("cmd.exe")
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                OsString::from("/bin/sh")
+            }
+        })
+}
+
+#[cfg(unix)]
+fn account_shell() -> Option<OsString> {
+    use std::ffi::CStr;
+
+    // A GUI-launched Tauri process often does not inherit SHELL. Read the
+    // account's configured shell directly, matching the platform terminal's
+    // fallback instead of assuming that every user runs zsh.
+    let passwd = unsafe { libc::getpwuid(libc::getuid()) };
+    if passwd.is_null() {
+        return None;
+    }
+
+    let shell = unsafe { CStr::from_ptr((*passwd).pw_shell) };
+    let shell = shell.to_str().ok()?.trim();
+    (!shell.is_empty()).then(|| OsString::from(shell))
+}
+
+#[cfg(windows)]
+fn account_shell() -> Option<OsString> {
+    std::env::var_os("COMSPEC").filter(|value| !value.is_empty())
+}
+
+fn shell_command() -> OsString {
+    configured_shell(
+        std::env::var_os("SHELL").as_deref(),
+        account_shell().as_deref(),
+    )
+}
+
+fn shell_arguments(shell: &OsStr) -> &'static [&'static str] {
     #[cfg(target_os = "windows")]
     {
-        Ok(std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_string()))
+        let _ = shell;
+        &[]
     }
+
     #[cfg(not(target_os = "windows"))]
     {
-        Ok(std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string()))
+        let _ = shell;
+        // One direct shell process gets both login and interactive startup.
+        // Do not invoke `sh -c "$SHELL -il"`: that would duplicate startup
+        // and can recurse when a user's startup file launches the shell.
+        &["-il"]
     }
+}
+
+fn terminal_environment(cwd: &Path, cols: u16, rows: u16) -> Vec<(&'static str, OsString)> {
+    let home = dirs::home_dir()
+        .or_else(|| std::env::var_os("HOME").map(PathBuf::from))
+        .unwrap_or_else(|| cwd.to_path_buf());
+    let path = std::env::var_os("PATH").unwrap_or_else(|| {
+        #[cfg(target_os = "windows")]
+        {
+            OsString::from("C:\\Windows\\System32;C:\\Windows")
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            OsString::from("/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin")
+        }
+    });
+    let lang = std::env::var_os("LANG").unwrap_or_else(|| OsString::from("C.UTF-8"));
+
+    vec![
+        ("HOME", home.into_os_string()),
+        ("PATH", path),
+        ("LANG", lang),
+        ("TERM", OsString::from("xterm-256color")),
+        ("COLUMNS", OsString::from(cols.max(20).to_string())),
+        ("LINES", OsString::from(rows.max(2).to_string())),
+    ]
+}
+
+fn shell_command_builder(shell: OsString, cwd: &Path, cols: u16, rows: u16) -> CommandBuilder {
+    let mut command = CommandBuilder::new(&shell);
+    command.args(shell_arguments(&shell));
+    command.cwd(cwd);
+    command.env("SHELL", &shell);
+    for (key, value) in terminal_environment(cwd, cols, rows) {
+        command.env(key, value);
+    }
+    command
 }
 
 #[tauri::command]
@@ -100,8 +190,18 @@ fn terminal_spawn<R: Runtime>(
     cols: u16,
     rows: u16,
 ) -> Result<u32, String> {
+    terminal_spawn_with_shell(app, state, cwd, cols, rows, shell_command())
+}
+
+fn terminal_spawn_with_shell<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    state: State<'_, SharedTerminalState>,
+    cwd: String,
+    cols: u16,
+    rows: u16,
+    shell: OsString,
+) -> Result<u32, String> {
     let cwd = safe_home_path(&cwd)?;
-    let shell = shell_command()?;
     let pty = native_pty_system()
         .openpty(PtySize {
             rows: rows.max(2),
@@ -110,8 +210,7 @@ fn terminal_spawn<R: Runtime>(
             pixel_height: 0,
         })
         .map_err(|error| format!("Could not create terminal: {error}"))?;
-    let mut command = CommandBuilder::new(shell);
-    command.cwd(cwd);
+    let command = shell_command_builder(shell, &cwd, cols, rows);
     let mut child = pty
         .slave
         .spawn_command(command)
@@ -389,6 +488,99 @@ mod tests {
     }
 
     #[test]
+    fn shell_selection_prefers_configured_shell_then_account_fallback() {
+        assert_eq!(
+            configured_shell(Some(OsStr::new("/bin/bash")), Some(OsStr::new("/bin/zsh"))),
+            OsString::from("/bin/bash")
+        );
+        assert_eq!(
+            configured_shell(None, Some(OsStr::new("/bin/zsh"))),
+            OsString::from("/bin/zsh")
+        );
+        assert_eq!(configured_shell(None, None), OsString::from("/bin/sh"));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn posix_shells_get_login_and_interactive_startup_flags() {
+        for shell in ["/bin/zsh", "/bin/bash"] {
+            assert_eq!(shell_arguments(OsStr::new(shell)), &["-il"]);
+        }
+    }
+
+    #[test]
+    fn terminal_environment_sets_shell_essentials_and_dimensions() {
+        let cwd = Path::new("/tmp");
+        let environment = terminal_environment(cwd, 120, 40)
+            .into_iter()
+            .collect::<HashMap<_, _>>();
+
+        assert_eq!(environment["TERM"], OsString::from("xterm-256color"));
+        assert_eq!(environment["COLUMNS"], OsString::from("120"));
+        assert_eq!(environment["LINES"], OsString::from("40"));
+        assert!(environment["HOME"]
+            .to_str()
+            .is_some_and(|value| !value.is_empty()));
+        assert!(environment["PATH"]
+            .to_str()
+            .is_some_and(|value| !value.is_empty()));
+        assert!(environment["LANG"]
+            .to_str()
+            .is_some_and(|value| !value.is_empty()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bash_and_zsh_start_as_interactive_login_shells_with_terminal_environment() {
+        for shell in ["/bin/bash", "/bin/zsh"] {
+            if !Path::new(shell).is_file() {
+                continue;
+            }
+
+            let app = test_app();
+            let handle = app.handle().clone();
+            let (output_tx, output_rx) = channel::<String>();
+            handle.listen("terminal://output", move |event| {
+                let data = field(event.payload(), "data");
+                let _ = output_tx.send(data.as_str().unwrap_or_default().to_string());
+            });
+
+            let session_id = terminal_spawn_with_shell(
+                handle.clone(),
+                handle.state::<SharedTerminalState>(),
+                env!("CARGO_MANIFEST_DIR").to_string(),
+                80,
+                24,
+                OsString::from(shell),
+            )
+            .expect("shell should spawn");
+            terminal_write(
+                handle.state::<SharedTerminalState>(),
+                session_id,
+                "printf 'qedit-s%s:%s:%s\\n' 'hell' \"$TERM\" \"$-\"\n".to_string(),
+            )
+            .expect("shell should accept input");
+
+            let transcript = read_until(&output_rx, "qedit-shell:");
+            let shell_flags = transcript
+                .split("qedit-shell:")
+                .nth(1)
+                .and_then(|line| line.split(':').nth(1))
+                .unwrap_or_default();
+            assert!(
+                transcript.contains("qedit-shell:xterm-256color:"),
+                "{shell} should receive TERM, got: {transcript:?}"
+            );
+            assert!(
+                shell_flags.contains('i'),
+                "{shell} should be interactive, got: {transcript:?}"
+            );
+            terminal_close(handle.state::<SharedTerminalState>(), session_id)
+                .expect("shell should close");
+        }
+    }
+
+    #[test]
     fn terminal_session_runs_commands_resizes_and_cleans_up() {
         let app = test_app();
         let handle = app.handle().clone();
@@ -429,6 +621,38 @@ mod tests {
         assert!(
             transcript.contains(&format!("qedit-pwd:{}", canonical_project.display())),
             "shell should start in the project directory, got: {transcript:?}"
+        );
+
+        terminal_write(
+            state.clone(),
+            session_id,
+            "printf 'qedit-e%s:%s:%s:%s:%s:%s\\n' 'nv' \"$TERM\" \"$HOME\" \"$LANG\" \"$-\" \"$(command -v clear)\"\n".to_string(),
+        )
+        .expect("terminal should accept environment probe");
+        let environment = read_until(&output_rx, "qedit-env:");
+        println!("--- terminal environment ---\n{environment}\n--- end environment ---");
+        assert!(
+            environment.contains("qedit-env:xterm-256color:"),
+            "shell should receive a compatible TERM, got: {environment:?}"
+        );
+        assert!(
+            environment
+                .split("qedit-env:")
+                .nth(1)
+                .and_then(|line| line.split(':').nth(3))
+                .is_some_and(|flags| flags.contains('i')),
+            "shell should be interactive, got: {environment:?}"
+        );
+        terminal_write(
+            state.clone(),
+            session_id,
+            "clear >/dev/null; printf 'qedit-c%s:ok\\n' 'lear'\n".to_string(),
+        )
+        .expect("terminal should accept clear probe");
+        let clear_output = read_until(&output_rx, "qedit-clear:ok");
+        assert!(
+            clear_output.contains("qedit-clear:ok"),
+            "clear should run successfully, got: {clear_output:?}"
         );
 
         terminal_resize(state.clone(), session_id, 120, 40).expect("terminal should resize");

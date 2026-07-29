@@ -2384,6 +2384,7 @@ name = "qedit"
 version = "0.1.0"
 dependencies = [
  "dirs",
+ "libc",
  "portable-pty",
  "serde",
  "serde_json",

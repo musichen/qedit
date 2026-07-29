@@ -30,6 +30,11 @@ else
   fi
 fi
 
+# Exercise the native PTY shell contract before checking the packaged app's
+# launch/shutdown lifecycle. This covers the same shell argv/environment path
+# used by the app, including TERM and the clear command.
+cargo test --manifest-path src-tauri/Cargo.toml terminal_session_runs_commands_resizes_and_cleans_up -- --nocapture
+
 LOG_FILE=$(mktemp "${TMPDIR:-/tmp}/qedit-native-smoke.XXXXXXXXXX")
 PID=""
 # shellcheck disable=SC2329 # invoked indirectly by the EXIT trap below.
