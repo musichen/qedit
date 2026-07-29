@@ -168,7 +168,9 @@ export function TerminalPanel() {
         const resize = () => {
           fit.fit();
           void resizeTerminal(sessionId, terminal.cols, terminal.rows).catch(
-            () => undefined,
+            (err: unknown) => {
+              console.error('Failed to resize terminal:', err);
+            },
           );
         };
         window.addEventListener('resize', resize);
@@ -178,7 +180,9 @@ export function TerminalPanel() {
         const sessionId = sessionRef.current;
         sessionRef.current = null;
         if (sessionId !== null) {
-          void closeTerminal(sessionId).catch(() => undefined);
+          void closeTerminal(sessionId).catch((err: unknown) => {
+            console.error('Failed to close terminal after error:', err);
+          });
         }
         if (!disposed) {
           setError(cause instanceof Error ? cause.message : String(cause));
@@ -195,7 +199,9 @@ export function TerminalPanel() {
       const sessionId = sessionRef.current;
       sessionRef.current = null;
       if (sessionId !== null) {
-        void closeTerminal(sessionId).catch(() => undefined);
+        void closeTerminal(sessionId).catch((err: unknown) => {
+          console.error('Failed to close terminal during cleanup:', err);
+        });
       }
     };
   }, [workspaceRoot]);
