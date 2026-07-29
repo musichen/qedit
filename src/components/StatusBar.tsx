@@ -10,7 +10,7 @@ export function StatusBar() {
     language,
     saving,
     saveError,
-    saveErrorScope,
+    saveErrorOwnsActiveFile,
   } = useEditor();
 
   const fileName = activeFilePath?.split('/').pop() ?? 'No file open';
@@ -23,7 +23,7 @@ export function StatusBar() {
     ? 'Ready'
     : saving
       ? 'Saving...'
-      : saveError && saveErrorScope === 'file'
+      : saveError && saveErrorOwnsActiveFile
         ? 'Save failed'
         : activeStatus?.kind === 'loading'
           ? 'Loading...'
