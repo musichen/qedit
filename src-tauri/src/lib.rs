@@ -571,7 +571,14 @@ mod tests {
     #[cfg(not(target_os = "windows"))]
     #[test]
     fn posix_shells_get_login_and_interactive_startup_flags() {
-        for shell in ["/bin/zsh", "/bin/bash", "/bin/sh", "/bin/dash", "/bin/ksh", "/usr/bin/fish"] {
+        for shell in [
+            "/bin/zsh",
+            "/bin/bash",
+            "/bin/sh",
+            "/bin/dash",
+            "/bin/ksh",
+            "/usr/bin/fish",
+        ] {
             assert_eq!(shell_arguments(OsStr::new(shell)), &["-il"]);
         }
     }
