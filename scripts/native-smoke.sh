@@ -32,6 +32,7 @@ fi
 
 LOG_FILE=$(mktemp "${TMPDIR:-/tmp}/qedit-native-smoke.XXXXXXXXXX")
 PID=""
+# shellcheck disable=SC2329 # invoked indirectly by the EXIT trap below.
 cleanup() {
   if [[ -n "$PID" ]] && kill -0 "$PID" 2>/dev/null; then
     kill -TERM "$PID" 2>/dev/null || true

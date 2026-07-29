@@ -16,6 +16,7 @@ fi
 PACKAGE_VERSION=$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")
 TAURI_VERSION=$(node -p "JSON.parse(require('fs').readFileSync('src-tauri/tauri.conf.json', 'utf8')).version")
 CARGO_VERSION=$(sed -n 's/^version = "\([^"]*\)"/\1/p' src-tauri/Cargo.toml | head -n 1)
+# shellcheck disable=SC2055 # the release must abort when *any* file disagrees.
 if [[ "$VERSION" != "$PACKAGE_VERSION" || "$VERSION" != "$TAURI_VERSION" || "$VERSION" != "$CARGO_VERSION" ]]; then
   echo "Error: release version $VERSION does not match project metadata" >&2
   echo "  package.json: $PACKAGE_VERSION" >&2

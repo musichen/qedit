@@ -27,6 +27,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 | `pnpm run dev` | Start the root Vite development server |
 | `pnpm run tauri:dev` | Start the Tauri desktop development shell (which starts Vite) |
 | `pnpm run lint` | oxlint across workspace |
+| `pnpm run lint:shell` | shellcheck over `scripts/*.sh`; skips with a notice when shellcheck is absent unless `QEDIT_REQUIRE_SHELLCHECK=1` |
 | `pnpm run format` | oxfmt --check |
 | `pnpm run format:fix` | oxfmt auto-fix |
 | `pnpm run typecheck` | Root tsc plus package typechecks via Turbo |
