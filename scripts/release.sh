@@ -3,50 +3,83 @@ set -euo pipefail
 
 VERSION="${1:-}"
 DRY_RUN="${DRY_RUN:-}"
+BUNDLE_DIR="src-tauri/target/release/bundle"
 
-# --- Validate version argument ---
-if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$'; then
+if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
   echo "Usage: $0 <version>"
   echo "  version must be semver-like (e.g. 0.1.0, 0.1.0-beta.1)"
   exit 1
 fi
 
-# --- Check clean git state ---
-if [ -z "$DRY_RUN" ] && [ -n "$(git status --porcelain)" ]; then
-  echo "Error: Working directory is not clean. Commit or stash changes first."
+# Never publish a tag whose metadata still says 0.1.0. Updating versions belongs
+# in a reviewed commit, not in a release script running on a clean checkout.
+PACKAGE_VERSION=$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")
+TAURI_VERSION=$(node -p "JSON.parse(require('fs').readFileSync('src-tauri/tauri.conf.json', 'utf8')).version")
+CARGO_VERSION=$(sed -n 's/^version = "\([^"]*\)"/\1/p' src-tauri/Cargo.toml | head -n 1)
+# shellcheck disable=SC2055 # the release must abort when *any* file disagrees.
+if [[ "$VERSION" != "$PACKAGE_VERSION" || "$VERSION" != "$TAURI_VERSION" || "$VERSION" != "$CARGO_VERSION" ]]; then
+  echo "Error: release version $VERSION does not match project metadata" >&2
+  echo "  package.json: $PACKAGE_VERSION" >&2
+  echo "  src-tauri/tauri.conf.json: $TAURI_VERSION" >&2
+  echo "  src-tauri/Cargo.toml: $CARGO_VERSION" >&2
   exit 1
 fi
 
-# --- Run full check pipeline ---
+if [[ -z "$DRY_RUN" && -n "$(git status --porcelain --untracked-files=all)" ]]; then
+  echo "Error: Working directory is not clean. Commit or stash changes first." >&2
+  exit 1
+fi
+
+# Resolve the release CLI before anything is published: a missing CLI must not
+# be discovered after the tag has already been pushed to the remote. The CLI
+# must already be installed; fetching an unpinned package over the network at
+# publish time is not acceptable in the step that uploads artifacts.
+if command -v gh-axi >/dev/null 2>&1; then
+  RELEASE_CLI=(gh-axi)
+elif command -v gh >/dev/null 2>&1; then
+  RELEASE_CLI=(gh)
+else
+  echo "Error: neither gh-axi nor gh is installed; cannot create the release" >&2
+  exit 1
+fi
+
 echo ""
 echo "=== Running check pipeline ==="
 pnpm run verify
 
-# --- Build for all platforms ---
+# Remove ignored bundle output before building so a failed or partial build can
+# never cause an older artifact to be attached to this release.
+rm -rf "$BUNDLE_DIR"
 echo ""
-echo "=== Building for all platforms ==="
-pnpm run build:all
+echo "=== Building the host release bundle ==="
+case "$(uname -s)" in
+  Darwin) pnpm run build:mac ;;
+  Linux) pnpm run build:linux ;;
+  MINGW*|MSYS*|CYGWIN*) pnpm run build:win ;;
+  *) echo "Unsupported release host: $(uname -s)" >&2; exit 1 ;;
+esac
 
-# --- Generate release notes ---
+declare -a ARTIFACTS=()
+while IFS= read -r -d '' artifact; do
+  ARTIFACTS+=("$artifact")
+done < <(find "$BUNDLE_DIR" -type f \( -name '*.dmg' -o -name '*.deb' -o -name '*.msi' \) -print0 2>/dev/null)
+if [[ ${#ARTIFACTS[@]} -eq 0 ]]; then
+  echo "Error: no release bundle was produced in $BUNDLE_DIR" >&2
+  exit 1
+fi
+
 echo ""
 echo "=== Generating release notes ==="
-
-LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-
-if [ -n "$LAST_TAG" ]; then
-  CHANGES=$(git log "${LAST_TAG}..HEAD" --pretty=format:"- %s (%an)" 2>/dev/null)
-  if [ -z "$CHANGES" ]; then
-    CHANGES="No changes since ${LAST_TAG}"
-  fi
+LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+if [[ -n "$LAST_TAG" ]]; then
+  CHANGES=$(git log "${LAST_TAG}..HEAD" --pretty=format:"- %s (%an)" 2>/dev/null || true)
+  [[ -n "$CHANGES" ]] || CHANGES="No changes since ${LAST_TAG}"
 else
   CHANGES=$(git log --pretty=format:"- %s (%an)" 2>/dev/null || echo "Initial release")
 fi
 
-CONTRIBUTORS=$(git log --pretty=format:"%an" "${LAST_TAG:-$(git rev-list --max-parents=0 HEAD)}..HEAD" 2>/dev/null | sort -u | sed 's/^/- /')
-if [ -z "$CONTRIBUTORS" ]; then
-  CONTRIBUTORS="- (none)"
-fi
-
+CONTRIBUTORS=$(git log --pretty=format:"%an" "${LAST_TAG:-$(git rev-list --max-parents=0 HEAD)}..HEAD" 2>/dev/null | sort -u | sed 's/^/- /' || true)
+[[ -n "$CONTRIBUTORS" ]] || CONTRIBUTORS="- (none)"
 NOTES=$(cat <<EOF
 # v${VERSION}
 
@@ -58,53 +91,31 @@ ${CONTRIBUTORS}
 EOF
 )
 
-# --- Collect build artifacts ---
-ARTIFACTS=""
-BUNDLE_DIR="src-tauri/target/release/bundle"
-if [ -d "$BUNDLE_DIR" ]; then
-  # Find dmg, deb, msi artifacts
-  for ext in dmg deb msi; do
-    found=$(find "$BUNDLE_DIR" -name "*.${ext}" -type f 2>/dev/null || true)
-    if [ -n "$found" ]; then
-      ARTIFACTS="$ARTIFACTS $found"
-    fi
-  done
-fi
-
-# --- Dry run: print what would happen ---
-if [ -n "$DRY_RUN" ]; then
-  echo ""
-  echo "=== DRY RUN ==="
-  echo "Would create tag: v${VERSION}"
+echo ""
+echo "=== Release candidate ==="
+echo "Tag: v${VERSION}"
+echo "Artifacts:"
+printf '  %s\n' "${ARTIFACTS[@]}"
+if [[ -n "$DRY_RUN" ]]; then
   echo ""
   echo "Release notes:"
   echo "$NOTES"
-  echo ""
-  if [ -n "$ARTIFACTS" ]; then
-    echo "Artifacts to attach:"
-    echo "$ARTIFACTS" | tr ' ' '\n' | sed 's/^/  /'
-  else
-    echo "Artifacts: none found in ${BUNDLE_DIR}"
-  fi
   exit 0
 fi
 
-# --- Create git tag ---
 echo ""
 echo "=== Creating tag v${VERSION} ==="
 git tag -a "v${VERSION}" -m "Release v${VERSION}"
 git push origin "v${VERSION}"
 
-# --- Create GitHub release ---
 echo ""
 echo "=== Creating GitHub release ==="
-# Build the gh release command
-GH_ARGS="gh release create \"v${VERSION}\" --title \"v${VERSION}\" --notes \"\$NOTES\""
-for artifact in $ARTIFACTS; do
-  GH_ARGS="$GH_ARGS \"$artifact\""
-done
-
-eval "$GH_ARGS"
+# Arrays preserve artifact paths and release notes without eval or shell
+# interpolation surprises.
+"${RELEASE_CLI[@]}" release create "v${VERSION}" \
+  --title "v${VERSION}" \
+  --notes "$NOTES" \
+  "${ARTIFACTS[@]}"
 
 echo ""
 echo "=== Release v${VERSION} complete ==="

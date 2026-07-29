@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
+use portable_pty::{native_pty_system, Child, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 use tauri::{Emitter, Manager, RunEvent, Runtime, State};
 
@@ -76,6 +76,11 @@ fn safe_home_path(path: &str) -> Result<PathBuf, String> {
     Ok(canonical)
 }
 
+fn stop_child(child: &mut Box<dyn Child + Send + Sync>) {
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
 fn shell_command() -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
@@ -114,22 +119,42 @@ fn terminal_spawn<R: Runtime>(
     drop(pty.slave);
 
     let master: SharedMaster = Arc::new(Mutex::new(pty.master));
-    let reader = master
-        .lock()
-        .map_err(|_| "Terminal master lock was poisoned".to_string())?
-        .try_clone_reader()
-        .map_err(|error| format!("Could not read terminal output: {error}"))?;
-    let writer = master
-        .lock()
-        .map_err(|_| "Terminal master lock was poisoned".to_string())?
-        .take_writer()
-        .map_err(|error| format!("Could not write to terminal: {error}"))?;
+    let reader = match master.lock() {
+        Ok(master) => match master.try_clone_reader() {
+            Ok(reader) => reader,
+            Err(error) => {
+                stop_child(&mut child);
+                return Err(format!("Could not read terminal output: {error}"));
+            }
+        },
+        Err(_) => {
+            stop_child(&mut child);
+            return Err("Terminal master lock was poisoned".to_string());
+        }
+    };
+    let writer = match master.lock() {
+        Ok(master) => match master.take_writer() {
+            Ok(writer) => writer,
+            Err(error) => {
+                stop_child(&mut child);
+                return Err(format!("Could not write to terminal: {error}"));
+            }
+        },
+        Err(_) => {
+            stop_child(&mut child);
+            return Err("Terminal master lock was poisoned".to_string());
+        }
+    };
     let killer: SharedKiller = Arc::new(Mutex::new(child.clone_killer()));
 
     let session_id = {
-        let mut terminals = state
-            .lock()
-            .map_err(|_| "Terminal state lock was poisoned".to_string())?;
+        let mut terminals = match state.lock() {
+            Ok(terminals) => terminals,
+            Err(_) => {
+                stop_child(&mut child);
+                return Err("Terminal state lock was poisoned".to_string());
+            }
+        };
         let id = terminals.next_id;
         terminals.next_id = terminals.next_id.wrapping_add(1).max(1);
         terminals.sessions.insert(

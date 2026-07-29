@@ -26,6 +26,31 @@ function sourceArtwork() {
   return decodePng(Buffer.from(payload, 'base64'));
 }
 
+function packagedIcnsPng(icns: Buffer): Buffer {
+  if (icns.subarray(0, 4).toString('ascii') !== 'icns') {
+    throw new Error('packaged macOS icon is not an ICNS file');
+  }
+
+  let offset = 8;
+  while (offset + 8 <= icns.length) {
+    const type = icns.toString('ascii', offset, offset + 4);
+    const length = icns.readUInt32BE(offset + 4);
+    if (length < 8) {
+      throw new Error('packaged macOS icon has a malformed ICNS chunk');
+    }
+    const body = icns.subarray(offset + 8, offset + length);
+    if (
+      type === 'ic09' &&
+      body.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+    ) {
+      return body;
+    }
+    offset += length;
+  }
+
+  throw new Error('packaged macOS icon is missing its 512px ic09 PNG');
+}
+
 describe('Tauri app icon', () => {
   it('bundles the generated icon from the root Tauri config', () => {
     expect(tauriConfig).toContain('"icon": ["icons/icon.png"]');
@@ -56,6 +81,23 @@ describe('Tauri app icon', () => {
 
   // Only the full-bleed resamples are comparable; the platform variants (iOS,
   // Android, Square*) are padded or alpha-flattened by the icon generator.
+  it('embeds the current generated artwork in a packaged macOS app', () => {
+    const appBundle = process.env.QEDIT_APP_BUNDLE;
+    if (!appBundle) return;
+
+    const packaged = decodePng(
+      packagedIcnsPng(
+        readFileSync(join(appBundle, 'Contents/Resources/qedit.icns')),
+      ),
+    );
+    const source = averageGrid(sourceArtwork(), GRID_SIZE);
+    const generated = averageGrid(packaged, GRID_SIZE);
+
+    expect(maxGridDifference(source, generated)).toBeLessThan(
+      MAX_CHANNEL_DRIFT,
+    );
+  });
+
   it.each(['icon.png', '128x128@2x.png', '128x128.png'])(
     'generates %s from the current qedit_logo.svg artwork',
     (icon) => {

@@ -40,7 +40,7 @@ interface WorkspaceContextValue {
   /** The single seam every file open goes through, so Recent stays in sync. */
   openWorkspaceFile: (filePath: string, displayName?: string) => Promise<void>;
   openRecentProject: (projectPath: string) => Promise<void>;
-  registerEntries: (entries: WorkspaceEntry[]) => void;
+  registerEntries: (entries: WorkspaceEntry[], sourceRoot: string) => void;
   retryWorkspace: () => void;
 }
 
@@ -70,36 +70,45 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     db.getRecentProjects(10),
   );
   const loadGeneration = useRef(0);
+  const workspaceRootRef = useRef<string | null>(null);
+  workspaceRootRef.current = workspaceRoot;
 
   const refreshRecent = useCallback(() => {
     setRecentFiles(db.getRecentFiles(10));
     setRecentProjects(db.getRecentProjects(10));
   }, []);
 
-  const loadWorkspace = useCallback((root: string) => {
-    const generation = ++loadGeneration.current;
-    setWorkspaceRoot(root);
-    setRootEntries([]);
-    setKnownFiles([]);
-    setLoading(true);
-    setError(null);
+  const loadWorkspace = useCallback(
+    (root: string, initialEntries?: WorkspaceEntry[]) => {
+      const generation = ++loadGeneration.current;
+      setWorkspaceRoot(root);
+      setRootEntries([]);
+      setKnownFiles([]);
+      setLoading(true);
+      setError(null);
 
-    void readWorkspaceDirectory(root).then(
-      (entries) => {
-        if (generation !== loadGeneration.current) return;
+      void (
+        initialEntries
+          ? Promise.resolve(initialEntries)
+          : readWorkspaceDirectory(root)
+      ).then(
+        (entries) => {
+          if (generation !== loadGeneration.current) return;
 
-        setRootEntries(entries);
-        setKnownFiles(entries.filter((entry) => entry.isFile));
-        setLoading(false);
-      },
-      (cause: unknown) => {
-        if (generation !== loadGeneration.current) return;
+          setRootEntries(entries);
+          setKnownFiles(entries.filter((entry) => entry.isFile));
+          setLoading(false);
+        },
+        (cause: unknown) => {
+          if (generation !== loadGeneration.current) return;
 
-        setLoading(false);
-        setError(errorMessage(cause));
-      },
-    );
-  }, []);
+          setLoading(false);
+          setError(errorMessage(cause));
+        },
+      );
+    },
+    [],
+  );
 
   const openFileDialog = useCallback(async () => {
     setError(null);
@@ -122,9 +131,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     try {
       const selected = await openNativeFolder();
 
-      if (!selected || !closeAllTabs()) return;
+      if (!selected) return;
 
-      loadWorkspace(selected);
+      // Validate the new workspace before closing the current tabs. A stale,
+      // unreadable, or rejected folder must never destroy the user's buffers.
+      const entries = await readWorkspaceDirectory(selected);
+      if (!closeAllTabs()) return;
+
+      loadWorkspace(selected, entries);
       db.addRecentProject(selected, basenameFromPath(selected));
       refreshRecent();
     } catch (cause) {
@@ -153,9 +167,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
       try {
         await assertSafePath(projectPath);
+        // Revalidate a recent project before closing the current tabs because it
+        // may have been moved or become unreadable since it was recorded.
+        const entries = await readWorkspaceDirectory(projectPath);
         if (!closeAllTabs()) return;
 
-        loadWorkspace(projectPath);
+        loadWorkspace(projectPath, entries);
         db.addRecentProject(projectPath, basenameFromPath(projectPath));
         refreshRecent();
       } catch (cause) {
@@ -165,17 +182,28 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     [closeAllTabs, loadWorkspace, refreshRecent],
   );
 
-  const registerEntries = useCallback((entries: WorkspaceEntry[]) => {
-    setKnownFiles((previous) => {
-      const next = new Map(previous.map((entry) => [entry.path, entry]));
+  const registerEntries = useCallback(
+    (entries: WorkspaceEntry[], sourceRoot: string) => {
+      setKnownFiles((previous) => {
+        // A folder expansion can finish after the user switches workspaces.
+        // Ignore that result so Quick Open never mixes two projects.
+        if (
+          !workspaceRootRef.current ||
+          sourceRoot !== workspaceRootRef.current
+        )
+          return previous;
 
-      for (const entry of entries) {
-        if (entry.isFile) next.set(entry.path, entry);
-      }
+        const next = new Map(previous.map((entry) => [entry.path, entry]));
 
-      return [...next.values()];
-    });
-  }, []);
+        for (const entry of entries) {
+          if (entry.isFile) next.set(entry.path, entry);
+        }
+
+        return [...next.values()];
+      });
+    },
+    [],
+  );
 
   const retryWorkspace = useCallback(() => {
     if (workspaceRoot) loadWorkspace(workspaceRoot);

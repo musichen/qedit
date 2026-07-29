@@ -43,6 +43,10 @@ interface EditorContextValue {
   language: string;
   saving: boolean;
   saveError: string | null;
+  // True when the visible failure belongs to the file the user is looking at.
+  // Only such a failure may drive the active buffer's status chip; a Save As
+  // that resolved against another tab is shown as a message only.
+  saveErrorOwnsActiveFile: boolean;
   hasDirtyTabs: boolean;
   dirtyTabCount: number;
   openFile: (path: string, name: string, language?: string) => void;
@@ -125,6 +129,10 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   const [saveFailure, setSaveFailure] = useState<{
     path: string;
     message: string;
+    // A 'file' failure belongs to one buffer and is hidden with it. A Save As
+    // failure belongs to the operation, not to whichever tab happens to be
+    // focused when the native dialog resolves, so it stays visible.
+    scope: 'file' | 'operation';
   } | null>(null);
   const loadedRef = useRef<Set<string>>(new Set());
   // Keep a small, disk-backed history for Cmd/Ctrl+Shift+T. Dirty buffers are
@@ -136,6 +144,10 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   // reuse an id an in-flight read is still waiting to match.
   const nextLoadRequestRef = useRef(1);
   const loadRequestRef = useRef<Map<string, number>>(new Map());
+  const activeFileRef = useRef<string | null>(null);
+  const openTabsRef = useRef<OpenTab[]>([]);
+  activeFileRef.current = activeFilePath;
+  openTabsRef.current = openTabs;
 
   const loadFile = useCallback((path: string) => {
     if (loadedRef.current.has(path)) return;
@@ -326,6 +338,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
           status?.kind === 'error'
             ? `Refusing to save ${activeFilePath}: the file was never read successfully`
             : `Refusing to save ${activeFilePath}: still loading`,
+        scope: 'file',
       });
 
       return;
@@ -337,6 +350,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       setSaveFailure({
         path: activeFilePath,
         message: `Refusing to save ${activeFilePath}: no buffer is cached for this file`,
+        scope: 'file',
       });
 
       return;
@@ -349,7 +363,11 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       await writeNativeTextFile(activeFilePath, content);
       markModified(activeFilePath, false);
     } catch (error) {
-      setSaveFailure({ path: activeFilePath, message: errorMessage(error) });
+      setSaveFailure({
+        path: activeFilePath,
+        message: errorMessage(error),
+        scope: 'file',
+      });
     } finally {
       setSaving(false);
     }
@@ -365,17 +383,23 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       setSaveFailure({
         path: activeFilePath,
         message: `Refusing to save ${activeFilePath}: the file is not ready`,
+        scope: 'file',
       });
 
       return;
     }
 
+    const sourcePath = activeFilePath;
     let targetPath: string | null;
 
     try {
-      targetPath = await saveNativeFile(activeFilePath);
+      targetPath = await saveNativeFile(sourcePath);
     } catch (error) {
-      setSaveFailure({ path: activeFilePath, message: errorMessage(error) });
+      setSaveFailure({
+        path: sourcePath,
+        message: `Could not save ${sourcePath} as a new file: ${errorMessage(error)}`,
+        scope: 'operation',
+      });
 
       return;
     }
@@ -386,13 +410,27 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    // The dialog can stay open while the user switches or closes tabs. The
+    // content and the source path are captured above, so a tab switch is
+    // harmless, but a closed source tab means there is no buffer left to save.
+    if (!openTabsRef.current.some((tab) => tab.path === sourcePath)) {
+      setSaveFailure({
+        path: sourcePath,
+        message: `Could not save as ${targetPath}: ${sourcePath} was closed before the save completed`,
+        scope: 'operation',
+      });
+
+      return;
+    }
+
     if (
-      targetPath !== activeFilePath &&
-      openTabs.some((tab) => tab.path === targetPath)
+      targetPath !== sourcePath &&
+      openTabsRef.current.some((tab) => tab.path === targetPath)
     ) {
       setSaveFailure({
-        path: activeFilePath,
+        path: sourcePath,
         message: `Could not save as ${targetPath}: that file is already open`,
+        scope: 'operation',
       });
 
       return;
@@ -405,45 +443,68 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       await writeNativeTextFile(targetPath, content);
       const targetName = basenameFromPath(targetPath);
 
+      // The file exists on disk now, so it belongs in Recent regardless of what
+      // happened to the tabs while the native write was in flight.
+      db.addRecentFile(targetPath, targetName);
+
+      // Keep the source tab's rename scoped to the tab that initiated Save As.
+      // The user may have closed it while the write was in flight, in which
+      // case there is no tab left to rename.
+      const sourceStillOpen = openTabsRef.current.some(
+        (tab) => tab.path === sourcePath,
+      );
+      if (!sourceStillOpen) return;
+
       setOpenTabs((prev) =>
         prev.map((tab) =>
-          tab.path === activeFilePath
+          tab.path === sourcePath
             ? { path: targetPath, name: targetName, isModified: false }
             : tab,
         ),
       );
       setFileContents((prev) => {
         const next = new Map(prev);
-        next.delete(activeFilePath);
+        next.delete(sourcePath);
         next.set(targetPath, content);
 
         return next;
       });
       setFileStatus((prev) => {
         const next = new Map(prev);
-        next.delete(activeFilePath);
+        next.delete(sourcePath);
         next.set(targetPath, { kind: 'loaded' });
 
         return next;
       });
-      loadedRef.current.delete(activeFilePath);
-      loadRequestRef.current.delete(activeFilePath);
+      loadedRef.current.delete(sourcePath);
+      loadRequestRef.current.delete(sourcePath);
       loadedRef.current.add(targetPath);
       loadRequestRef.current.set(targetPath, nextLoadRequestRef.current++);
-      setActiveFilePath(targetPath);
-      setLanguage(languageFromPath(targetPath));
-      db.addRecentFile(targetPath, targetName);
+      setActiveFilePath((current) =>
+        current === sourcePath ? targetPath : current,
+      );
+      if (activeFileRef.current === sourcePath) {
+        setLanguage(languageFromPath(targetPath));
+      }
     } catch (error) {
-      setSaveFailure({ path: activeFilePath, message: errorMessage(error) });
+      setSaveFailure({
+        path: sourcePath,
+        message: `Could not save as ${targetPath}: ${errorMessage(error)}`,
+        scope: 'operation',
+      });
     } finally {
       setSaving(false);
     }
-  }, [activeFilePath, fileContents, fileStatus, openTabs]);
+  }, [activeFilePath, fileContents, fileStatus]);
 
-  const saveError =
-    saveFailure && saveFailure.path === activeFilePath
-      ? saveFailure.message
+  const visibleFailure =
+    saveFailure &&
+    (saveFailure.scope === 'operation' || saveFailure.path === activeFilePath)
+      ? saveFailure
       : null;
+  const saveError = visibleFailure?.message ?? null;
+  const saveErrorOwnsActiveFile =
+    visibleFailure !== null && visibleFailure.path === activeFilePath;
   const dirtyTabCount = openTabs.filter((tab) => tab.isModified).length;
   const hasDirtyTabs = dirtyTabCount > 0;
 
@@ -458,6 +519,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       language,
       saving,
       saveError,
+      saveErrorOwnsActiveFile,
       hasDirtyTabs,
       dirtyTabCount,
       openFile,
@@ -483,6 +545,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       language,
       saving,
       saveError,
+      saveErrorOwnsActiveFile,
       hasDirtyTabs,
       dirtyTabCount,
       openFile,
