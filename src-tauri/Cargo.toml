@@ -2,6 +2,10 @@
 name = "qedit"
 version = "0.1.0"
 edition = "2021"
+description = "A lightweight Tauri 2 desktop file editor with Monaco and integrated terminal"
+authors = ["Alex Musichen <alex.musichen@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/musichen/qedit"
 
 [lib]
 name = "qedit_lib"
