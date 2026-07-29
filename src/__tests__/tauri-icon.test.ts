@@ -10,6 +10,9 @@ const projectRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const tauriRoot = join(projectRoot, 'src-tauri');
 const iconRoot = join(tauriRoot, 'icons');
 const tauriConfig = readFileSync(join(tauriRoot, 'tauri.conf.json'), 'utf-8');
+const parsedTauriConfig = JSON.parse(tauriConfig) as {
+  bundle?: { icon?: string[] };
+};
 
 const GRID_SIZE = 8;
 const MAX_CHANNEL_DRIFT = 12;
@@ -53,8 +56,29 @@ function packagedIcnsPng(icns: Buffer): Buffer {
 
 describe('Tauri app icon', () => {
   it('bundles the generated icon from the root Tauri config', () => {
-    expect(tauriConfig).toContain('"icon": ["icons/icon.png"]');
+    expect(parsedTauriConfig.bundle?.icon).toContain('icons/icon.png');
     expect(existsSync(join(iconRoot, 'icon.png'))).toBe(true);
+  });
+
+  it('provides a valid ICO input for Windows bundling', () => {
+    expect(parsedTauriConfig.bundle?.icon).toContain('icons/icon.ico');
+
+    const ico = readFileSync(join(iconRoot, 'icon.ico'));
+    expect(ico.readUInt16LE(0)).toBe(0);
+    expect(ico.readUInt16LE(2)).toBe(1);
+    const imageCount = ico.readUInt16LE(4);
+    expect(imageCount).toBeGreaterThan(0);
+
+    for (let index = 0; index < imageCount; index += 1) {
+      const entry = 6 + index * 16;
+      const imageSize = ico.readUInt32LE(entry + 8);
+      const imageOffset = ico.readUInt32LE(entry + 12);
+      expect(imageSize).toBeGreaterThan(0);
+      expect(imageOffset + imageSize).toBeLessThanOrEqual(ico.length);
+      expect(ico.subarray(imageOffset, imageOffset + 8)).toEqual(
+        Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+      );
+    }
   });
 
   it('uses the vector source and keeps the complete generated icon set', () => {

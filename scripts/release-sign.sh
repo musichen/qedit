@@ -38,12 +38,12 @@ require_values() {
   fi
 }
 
-has_any_value() {
+has_all_values() {
   local name
   for name in "$@"; do
-    [[ -n "${!name:-}" ]] && return 0
+    [[ -n "${!name:-}" ]] || return 1
   done
-  return 1
+  return 0
 }
 
 if [[ "$TARGET" == linux-* ]]; then
@@ -52,14 +52,15 @@ if [[ "$TARGET" == linux-* ]]; then
 fi
 
 if [[ "$TARGET" == macos-* ]]; then
-  if ! has_any_value APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; then
+  if ! has_all_values APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; then
     if [[ "${QEDIT_REQUIRE_SIGNING:-}" != 1 ]]; then
-      write_status 'unsigned' 'APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, and APPLE_TEAM_ID are not configured'
+      write_status 'unsigned' 'Apple signing credentials are absent or incomplete'
       echo "warning: macOS artifacts are unsigned; set QEDIT_REQUIRE_SIGNING=1 to make this a release-blocking error" >&2
       exit 0
     fi
+    echo "Error: macOS signing is required but credentials are absent or incomplete" >&2
+    exit 1
   fi
-  require_values APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
   command -v security >/dev/null 2>&1 || { echo 'Error: macOS signing requires the security command' >&2; exit 1; }
   command -v codesign >/dev/null 2>&1 || { echo 'Error: macOS signing requires codesign' >&2; exit 1; }
   command -v xcrun >/dev/null 2>&1 || { echo 'Error: macOS notarization requires xcrun' >&2; exit 1; }
@@ -93,14 +94,15 @@ if [[ "$TARGET" == macos-* ]]; then
   exit 0
 fi
 
-if ! has_any_value WINDOWS_CERTIFICATE_BASE64 WINDOWS_CERTIFICATE_PASSWORD WINDOWS_TIMESTAMP_URL; then
+if ! has_all_values WINDOWS_CERTIFICATE_BASE64 WINDOWS_CERTIFICATE_PASSWORD WINDOWS_TIMESTAMP_URL; then
   if [[ "${QEDIT_REQUIRE_SIGNING:-}" != 1 ]]; then
-    write_status 'unsigned' 'WINDOWS_CERTIFICATE_BASE64, WINDOWS_CERTIFICATE_PASSWORD, and WINDOWS_TIMESTAMP_URL are not configured'
+    write_status 'unsigned' 'Windows signing credentials are absent or incomplete'
     echo "warning: Windows artifacts are unsigned; set QEDIT_REQUIRE_SIGNING=1 to make this a release-blocking error" >&2
     exit 0
   fi
+  echo "Error: Windows signing is required but credentials are absent or incomplete" >&2
+  exit 1
 fi
-require_values WINDOWS_CERTIFICATE_BASE64 WINDOWS_CERTIFICATE_PASSWORD WINDOWS_TIMESTAMP_URL
 command -v signtool >/dev/null 2>&1 || {
   echo 'Error: Windows signing requires signtool.exe on PATH (install the Windows SDK on the runner)' >&2
   exit 1
