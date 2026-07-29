@@ -171,8 +171,17 @@ function EditorLayout() {
         if (disposed) cleanup();
         else unlisten = cleanup;
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         // Browser development and Vitest do not provide Tauri's window IPC.
+        if (
+          err instanceof Error &&
+          err.message &&
+          /is not a Tauri window|not a function|Cannot find module/i.test(err.message)
+        ) {
+          // Expected: running outside Tauri (browser dev, Vitest).
+        } else {
+          console.warn('Failed to set up Tauri IPC listener:', err);
+        }
       });
 
     return () => {
