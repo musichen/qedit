@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -114,11 +115,25 @@ describe('release pipeline contract', () => {
     expect(releaseBuild).toContain(
       'CI=true NO_AT_BRIDGE=1 pnpm exec tauri build --bundles deb,appimage',
     );
-    expect(releaseBuild).not.toContain('xdg-open');
     expect(workflow).not.toContain("QEDIT_REQUIRE_SIGNED: '1'");
     expect(workflow).toContain(
       'dist/release/v${{ steps.version.outputs.version }}/${{ matrix.target }}',
     );
+  });
+
+  it('bundles a portable xdg-open fallback for AppImage builds', () => {
+    const config = JSON.parse(
+      readFileSync(join(projectRoot, 'src-tauri/tauri.conf.json'), 'utf8'),
+    );
+    const source = config.bundle.linux.appimage.files['/usr/bin/xdg-open'];
+    const shimPath = join(projectRoot, 'src-tauri', source);
+    const shim = readFileSync(shimPath, 'utf8');
+
+    expect(source).toBe('files/xdg-open');
+    expect(config.plugins.shell.open).toBe(true);
+    expect(statSync(shimPath).mode & 0o111).not.toBe(0);
+    expect(shim).toContain('/usr/bin/xdg-open');
+    expect(shim).toContain('gio open');
   });
 
   it('verifies a complete matrix and emits checksums and provenance', () => {

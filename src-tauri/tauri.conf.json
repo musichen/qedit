@@ -26,7 +26,14 @@
   "bundle": {
     "active": true,
     "targets": ["app", "dmg"],
-    "icon": ["icons/icon.png"]
+    "icon": ["icons/icon.png"],
+    "linux": {
+      "appimage": {
+        "files": {
+          "/usr/bin/xdg-open": "files/xdg-open"
+        }
+      }
+    }
   },
   "plugins": {
     "fs": {

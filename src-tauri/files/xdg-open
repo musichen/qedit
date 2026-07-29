@@ -1,0 +1,19 @@
+#!/bin/sh
+# Keep the shell plugin's open capability usable in AppImages without making
+# xdg-utils a build-time dependency on headless Linux runners.
+set -eu
+
+if [ -x /usr/bin/xdg-open ] && [ "$(readlink -f /usr/bin/xdg-open 2>/dev/null || true)" != "$0" ]; then
+  exec /usr/bin/xdg-open "$@"
+fi
+
+if command -v gio >/dev/null 2>&1; then
+  exec gio open "$@"
+fi
+
+if command -v sensible-browser >/dev/null 2>&1; then
+  exec sensible-browser "$@"
+fi
+
+echo "qedit: no desktop URL opener is available" >&2
+exit 1

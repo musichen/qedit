@@ -76,8 +76,9 @@ case "$PLATFORM" in
     bash "$PROJECT_ROOT/scripts/build-mac.sh"
     ;;
   windows) pnpm exec tauri build --bundles msi,nsis ;;
-  # Tauri's AppImage bundler tries to open the finished image unless CI mode is
-  # explicit. Keep Linux release builds launcher-free on headless runners.
+  # shell.open=true makes Tauri's AppImage bundler copy xdg-open from the
+  # host. tauri.conf.json supplies a portable fallback via appimage.files, so
+  # these builds do not require xdg-utils on headless runners.
   linux) CI=true NO_AT_BRIDGE=1 pnpm exec tauri build --bundles deb,appimage ;;
 esac
 
