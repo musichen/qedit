@@ -579,6 +579,27 @@ mod tests {
                 }
             }
         }
+
+        fn wait_for_all(&mut self, markers: &[&str]) {
+            let deadline = Instant::now() + Duration::from_secs(10);
+
+            loop {
+                if markers.iter().all(|marker| self.seen.contains(marker)) {
+                    return;
+                }
+
+                if Instant::now() >= deadline {
+                    panic!(
+                        "timed out waiting for all markers {markers:?}; transcript so far: {:?}",
+                        self.seen
+                    );
+                }
+
+                if let Ok(chunk) = self.rx.recv_timeout(Duration::from_millis(500)) {
+                    self.seen.push_str(&chunk);
+                }
+            }
+        }
     }
 
     /// Kills its session on drop, so a failed or timed-out assertion cannot
@@ -915,6 +936,52 @@ mod tests {
             terminal_write(state, session_id, "echo late\n".to_string()),
             Err("Terminal session is closed".to_string())
         );
+    }
+
+    #[test]
+    fn multiple_terminal_sessions_keep_commands_and_lifecycle_independent() {
+        let app = test_app();
+        let handle = app.handle().clone();
+        let mut output = listen_for_output(&handle);
+        let project = env!("CARGO_MANIFEST_DIR").to_string();
+        let state = handle.state::<SharedTerminalState>();
+        let first = terminal_spawn(handle.clone(), state.clone(), project.clone(), 80, 24)
+            .expect("first terminal should spawn");
+        let second = terminal_spawn(handle.clone(), state.clone(), project, 80, 24)
+            .expect("second terminal should spawn");
+        let _first_guard = SessionGuard::new(&state, first);
+        let _second_guard = SessionGuard::new(&state, second);
+
+        terminal_write(
+            state.clone(),
+            first,
+            "printf 'qedit-first-session:%s\\n' first\n".to_string(),
+        )
+        .expect("first terminal should accept input");
+        terminal_write(
+            state.clone(),
+            second,
+            "printf 'qedit-second-session:%s\\n' second\n".to_string(),
+        )
+        .expect("second terminal should accept input");
+        output.wait_for_all(&["qedit-first-session:first", "qedit-second-session:second"]);
+
+        terminal_close(state.clone(), first).expect("first terminal should close");
+        assert!(
+            terminal_write(state.clone(), first, "echo closed\n".to_string()).is_err(),
+            "a closed terminal must reject later writes"
+        );
+        assert!(
+            state.lock().unwrap().sessions.contains_key(&second),
+            "closing one terminal must not deregister another"
+        );
+        terminal_write(
+            state,
+            second,
+            "printf 'qedit-second-still-alive:%s\\n' alive\n".to_string(),
+        )
+        .expect("second terminal should remain writable");
+        output.wait_for("qedit-second-still-alive:alive");
     }
 
     #[test]

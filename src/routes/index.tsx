@@ -54,6 +54,15 @@ function EditorLayout() {
       // share the same chord (Cmd+Shift+O also opens Monaco's symbol picker).
       event.stopPropagation();
 
+      if (/^terminal-[1-9]$/.test(action)) {
+        window.dispatchEvent(
+          new CustomEvent('qedit:terminal-tab', {
+            detail: Number(action.slice('terminal-'.length)) - 1,
+          }),
+        );
+        return;
+      }
+
       switch (action) {
         case 'open-file':
           void openFileDialog();
@@ -100,6 +109,15 @@ function EditorLayout() {
           if (previousTab) setActiveFile(previousTab.path);
           break;
         }
+        case 'close-terminal':
+          window.dispatchEvent(new Event('qedit:terminal-close'));
+          break;
+        case 'next-terminal':
+          window.dispatchEvent(new Event('qedit:terminal-next'));
+          break;
+        case 'previous-terminal':
+          window.dispatchEvent(new Event('qedit:terminal-previous'));
+          break;
         case 'focus-terminal':
           window.dispatchEvent(new Event('qedit:focus-terminal'));
           break;
@@ -176,7 +194,9 @@ function EditorLayout() {
         if (
           err instanceof Error &&
           err.message &&
-          /is not a Tauri window|not a function|Cannot find module/i.test(err.message)
+          /is not a Tauri window|not a function|Cannot find module/i.test(
+            err.message,
+          )
         ) {
           // Expected: running outside Tauri (browser dev, Vitest).
         } else {

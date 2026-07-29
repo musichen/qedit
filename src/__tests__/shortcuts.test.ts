@@ -75,6 +75,17 @@ describe('shortcutActionForEvent', () => {
     expect(shortcutActionForEvent(event({ key: '`', target: terminal }))).toBe(
       'focus-editor',
     );
+    expect(
+      shortcutActionForEvent(event({ key: 'Tab', target: terminal })),
+    ).toBe('next-terminal');
+    expect(
+      shortcutActionForEvent(
+        event({ key: 'Tab', shiftKey: true, target: terminal }),
+      ),
+    ).toBe('previous-terminal');
+    expect(shortcutActionForEvent(event({ key: '2', target: terminal }))).toBe(
+      'terminal-2',
+    );
   });
 
   it('toggles focus back to the editor from anywhere inside the terminal', () => {
@@ -86,6 +97,18 @@ describe('shortcutActionForEvent', () => {
     expect(shortcutActionForEvent(event({ key: '`', target: screen }))).toBe(
       'focus-editor',
     );
+  });
+
+  it('keeps terminal-tab navigation scoped to terminal tabs', () => {
+    const terminalTab = document.createElement('button');
+    terminalTab.dataset.terminalTab = 'terminal-1';
+
+    expect(
+      shortcutActionForEvent(event({ key: 'w', target: terminalTab })),
+    ).toBe('close-terminal');
+    expect(
+      shortcutActionForEvent(event({ key: '3', target: terminalTab })),
+    ).toBe('terminal-3');
   });
 
   it('keeps workspace shortcuts alive inside the Monaco editor', () => {
