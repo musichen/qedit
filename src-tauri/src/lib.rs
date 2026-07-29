@@ -398,16 +398,15 @@ mod tests {
         }
 
         /// Wait for the next occurrence of `marker` after everything already
-        /// matched, returning the transcript segment it was found in.
-        fn wait_for(&mut self, marker: &str) -> String {
+        /// matched, advancing past it.
+        fn wait_for(&mut self, marker: &str) {
             let deadline = Instant::now() + Duration::from_secs(10);
 
             loop {
                 if let Some(offset) = self.seen[self.cursor..].find(marker) {
-                    let start = self.cursor;
                     self.cursor += offset + marker.len();
 
-                    return self.seen[start..self.cursor].to_string();
+                    return;
                 }
 
                 if Instant::now() >= deadline {
@@ -481,6 +480,12 @@ mod tests {
     /// Hand the PTY over to an rc-free bash in emacs editing mode. The editing
     /// assertions then depend only on the PTY seam, never on the developer's
     /// `$SHELL`, shell rc files, or `~/.inputrc`.
+    ///
+    /// The handoff carries its own prompt through the environment (`\076` is
+    /// the `>` bash renders, so the outer shell's echo of this line can never
+    /// be mistaken for the prompt itself). Waiting for that prompt proves the
+    /// exec completed before any further input is written, so an outer shell
+    /// that buffered typeahead cannot swallow the setup line.
     fn start_rc_free_shell(
         state: &State<'_, SharedTerminalState>,
         session_id: u32,
@@ -490,24 +495,23 @@ mod tests {
             state.clone(),
             session_id,
             format!(
-                "exec env INPUTRC=/dev/null {} --norc --noprofile -i\n",
+                "exec env INPUTRC=/dev/null 'PS1=QEDIT_PROMPT\\076 ' {} --norc --noprofile -i\n",
                 bash_path()
             ),
         )
         .expect("terminal should accept the rc-free shell handoff");
+        output.wait_for(EDITING_PROMPT);
 
         terminal_write(
             state.clone(),
             session_id,
             concat!(
                 "set -o emacs; set +H; set +o history; unset HISTFILE; ",
-                "bind '\"\\e[3~\": delete-char'; ",
-                "PS2=''; PS1=$(printf 'QEDIT_%s> ' PROMPT)\n"
+                "bind '\"\\e[3~\": delete-char'; PS2=''\n"
             )
             .to_string(),
         )
         .expect("terminal should accept the editing-mode setup");
-
         output.wait_for(EDITING_PROMPT);
     }
 
