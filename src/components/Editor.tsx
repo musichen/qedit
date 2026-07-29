@@ -1,13 +1,17 @@
 import MonacoEditor, { type OnMount } from '@monaco-editor/react';
+import { Edit3, Eye } from 'lucide-react';
 import type { editor } from 'monaco-editor';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useEditor } from './EditorContext';
 import { EmptyState } from './EmptyState';
 
+import { MarkdownPreview } from '#/lib/markdown';
+
 export function Editor() {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const [monacoReady, setMonacoReady] = useState(false);
+  const [markdownPreview, setMarkdownPreview] = useState(false);
   const {
     language,
     activeFilePath,
@@ -17,6 +21,10 @@ export function Editor() {
     markModified,
     updateFileContent,
   } = useEditor();
+
+  useEffect(() => {
+    setMarkdownPreview(language === 'markdown');
+  }, [activeFilePath, language]);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,6 +127,70 @@ export function Editor() {
   }
 
   const currentValue = fileContents.get(activeFilePath) ?? '';
+
+  if (language === 'markdown') {
+    return (
+      <div className="flex h-full min-h-0 flex-col bg-background">
+        <div className="flex h-9 shrink-0 items-center justify-between border-b px-3 text-xs">
+          <span className="font-medium text-muted-foreground">Markdown</span>
+          <div className="flex items-center gap-1 rounded border p-0.5">
+            <button
+              type="button"
+              className={`inline-flex items-center gap-1 rounded px-2 py-1 ${
+                !markdownPreview
+                  ? 'bg-muted text-foreground'
+                  : 'text-muted-foreground'
+              }`}
+              onClick={() => setMarkdownPreview(false)}
+              aria-pressed={!markdownPreview}
+            >
+              <Edit3 className="h-3 w-3" />
+              Edit
+            </button>
+            <button
+              type="button"
+              className={`inline-flex items-center gap-1 rounded px-2 py-1 ${
+                markdownPreview
+                  ? 'bg-muted text-foreground'
+                  : 'text-muted-foreground'
+              }`}
+              onClick={() => setMarkdownPreview(true)}
+              aria-pressed={markdownPreview}
+            >
+              <Eye className="h-3 w-3" />
+              Preview
+            </button>
+          </div>
+        </div>
+        {markdownPreview ? (
+          <div className="min-h-0 flex-1 overflow-auto">
+            <MarkdownPreview content={currentValue} />
+          </div>
+        ) : (
+          <div className="min-h-0 flex-1">
+            <MonacoEditor
+              height="100%"
+              defaultLanguage="markdown"
+              value={currentValue}
+              language={language}
+              onChange={handleChange}
+              onMount={handleEditorMount}
+              theme="vs-dark"
+              options={{
+                fontSize: 14,
+                lineNumbers: 'on',
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                wordWrap: 'on',
+                tabSize: 2,
+                automaticLayout: true,
+              }}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <MonacoEditor

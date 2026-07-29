@@ -50,11 +50,12 @@ interface EditorContextValue {
   hasDirtyTabs: boolean;
   dirtyTabCount: number;
   openFile: (path: string, name: string, language?: string) => void;
-  closeTab: (path: string) => boolean;
+  closeTab: (path: string, discardUnsaved?: boolean) => boolean;
   closeAllTabs: () => boolean;
   reopenLastClosedTab: () => void;
   reloadActiveFile: () => void;
   setActiveFile: (path: string) => void;
+  renameFilePath: (oldPath: string, newPath: string) => void;
   setCursorPosition: (pos: CursorPosition) => void;
   markModified: (path: string, modified: boolean) => void;
   setLanguage: (language: string) => void;
@@ -198,13 +199,14 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   );
 
   const closeTab = useCallback(
-    (path: string): boolean => {
+    (path: string, discardUnsaved = false): boolean => {
       const closedTab = openTabs.find((tab) => tab.path === path);
 
       if (!closedTab) return false;
 
       if (
         closedTab.isModified &&
+        !discardUnsaved &&
         !browserConfirm(
           `${closedTab.name} has unsaved changes. Close it and discard them?`,
         )
@@ -308,6 +310,43 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     },
     [loadFile],
   );
+
+  const renameFilePath = useCallback((oldPath: string, newPath: string) => {
+    setOpenTabs((prev) =>
+      prev.map((tab) =>
+        tab.path === oldPath
+          ? { ...tab, path: newPath, name: basenameFromPath(newPath) }
+          : tab,
+      ),
+    );
+    setFileContents((prev) => {
+      if (!prev.has(oldPath)) return prev;
+
+      const next = new Map(prev);
+      const content = next.get(oldPath);
+      next.delete(oldPath);
+      if (content !== undefined) next.set(newPath, content);
+
+      return next;
+    });
+    setFileStatus((prev) => {
+      if (!prev.has(oldPath)) return prev;
+
+      const next = new Map(prev);
+      const status = next.get(oldPath);
+      next.delete(oldPath);
+      if (status) next.set(newPath, status);
+
+      return next;
+    });
+    if (loadedRef.current.delete(oldPath)) loadedRef.current.add(newPath);
+    const requestId = loadRequestRef.current.get(oldPath);
+    loadRequestRef.current.delete(oldPath);
+    if (requestId !== undefined) loadRequestRef.current.set(newPath, requestId);
+    setActiveFilePath((current) => (current === oldPath ? newPath : current));
+    if (activeFileRef.current === oldPath)
+      setLanguage(languageFromPath(newPath));
+  }, []);
 
   const markModified = useCallback((path: string, modified: boolean) => {
     setOpenTabs((prev) =>
@@ -441,6 +480,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
     try {
       await writeNativeTextFile(targetPath, content);
+      window.dispatchEvent(new Event('qedit:workspace-refresh'));
       const targetName = basenameFromPath(targetPath);
 
       // The file exists on disk now, so it belongs in Recent regardless of what
@@ -528,6 +568,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       reopenLastClosedTab,
       reloadActiveFile,
       setActiveFile,
+      renameFilePath,
       setCursorPosition,
       markModified,
       setLanguage,
@@ -554,6 +595,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       reopenLastClosedTab,
       reloadActiveFile,
       setActiveFile,
+      renameFilePath,
       markModified,
       updateFileContent,
       saveActiveFile,

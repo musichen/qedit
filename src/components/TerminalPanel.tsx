@@ -174,11 +174,14 @@ export function TerminalPanel() {
     : -1;
 
   return (
-    <section className="flex h-52 min-h-0 flex-col border-t bg-[#111318]">
-      <div className="flex h-8 shrink-0 items-stretch border-b border-white/10 text-[11px] font-medium text-slate-300">
-        <div className="flex shrink-0 items-center gap-2 px-3">
+    <section
+      className="flex h-52 min-h-0 flex-col border-t bg-[#111318]"
+      aria-label="Terminal panel"
+    >
+      <div className="flex h-9 shrink-0 items-stretch border-b border-white/10 text-xs font-medium text-slate-300">
+        <div className="flex shrink-0 items-center gap-2 border-r border-white/10 px-3">
           <TerminalIcon className="h-3.5 w-3.5" />
-          <span className="sr-only">Integrated terminals</span>
+          <span>Terminal</span>
         </div>
         <div
           className="flex min-w-0 flex-1 items-stretch overflow-x-auto"
@@ -234,12 +237,13 @@ export function TerminalPanel() {
         </div>
         <button
           type="button"
-          className="flex shrink-0 items-center border-l border-white/10 px-2 text-slate-400 hover:bg-white/5 hover:text-slate-100"
+          className="flex shrink-0 items-center gap-1.5 border-l border-white/10 px-3 text-slate-300 hover:bg-white/5 hover:text-slate-100"
           onClick={addTerminal}
           aria-label="New terminal"
           title="New terminal"
         >
           <Plus className="h-3.5 w-3.5" />
+          <span>New Terminal</span>
         </button>
       </div>
       <div className="flex h-5 shrink-0 items-center gap-2 px-3 text-[10px] text-slate-500">

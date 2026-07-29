@@ -14,6 +14,10 @@ Monaco as the editing surface.
 - The Explorer lists the open workspace and expands folders on demand. Hidden
   entries, symlinks, and `node_modules`, `target`, `dist`, and `.turbo` are
   skipped.
+- The Explorer toolbar creates a new empty file in the open workspace, refreshes
+  after file mutations, and exposes filename/path search. New files stay inside
+  the workspace and `$HOME`; cancellation and invalid destinations leave the
+  workspace unchanged.
 - Open files stack in the tab bar; a dot marks unsaved edits. Closing a modified
   tab asks for confirmation and discards those edits, and opening another folder
   or quitting the app asks the same way. Closing a clean tab drops its buffer, so
@@ -23,6 +27,9 @@ Monaco as the editing surface.
   the tab to it; it refuses a target that is already open in another tab.
 - Quick open (**Cmd/Ctrl+P**) searches the workspace files and your recent files
   by name or path, with arrow keys, Home/End, and Enter to open.
+- Markdown files open with a rendered Preview by default; the Edit/Preview
+  toggle returns to Monaco editing. Rendering is local and safe, with readable
+  headings, lists, code blocks, and restricted links.
 - A file that is still loading, or that failed to read, cannot be edited or
   saved - the status bar reports the reason. The status bar also shows the file
   path, cursor position, indentation, language, the current state (loading,
