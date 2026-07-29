@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 const projectRoot = join(import.meta.dirname, '..', '..');
 const packageJson = JSON.parse(
@@ -54,15 +54,22 @@ describe('macOS packaging lifecycle', () => {
     );
   });
 
-  it('keeps macOS target installation tolerant of a missing rustup', () => {
+  it('asserts the app bundle carries an executable binary', () => {
     const buildScript = readFileSync(
       join(projectRoot, 'scripts', 'build-mac.sh'),
       'utf-8',
     );
 
-    expect(buildScript).toMatch(
-      /if command -v rustup[\s\S]*rustup target add aarch64-apple-darwin x86_64-apple-darwin \|\| true/,
+    expect(buildScript).toContain('! -x "$APP_PATH/Contents/MacOS/qedit"');
+  });
+
+  it('does not mutate the global Rust toolchain', () => {
+    const buildScript = readFileSync(
+      join(projectRoot, 'scripts', 'build-mac.sh'),
+      'utf-8',
     );
+
+    expect(buildScript).not.toContain('rustup target add');
   });
 
   it('does not collect Tauri temporary images as release artifacts', () => {
@@ -80,7 +87,11 @@ describe('macOS packaging lifecycle', () => {
  * `pnpm`, so the AppleScript fallback can be exercised headlessly without
  * running a real Tauri build.
  */
-type StubMode = 'dmg-stage-then-ok' | 'dmg-stage-always' | 'unrelated-failure';
+type StubMode =
+  | 'ok'
+  | 'dmg-stage-then-ok'
+  | 'dmg-stage-always'
+  | 'unrelated-failure';
 
 // Tauri swallows create-dmg's own output, so a Finder/AppleEvent failure only
 // ever surfaces as this generic bundle_dmg.sh error.
@@ -105,11 +116,21 @@ ${DMG_FAILURE_OUTPUT.map((line) => `  echo "${line}"`).join('\n')}
   exit 1
 }
 
+emit_bundles() {
+  mkdir -p "$bundle/macos/qedit.app/Contents/MacOS"
+  : > "$bundle/macos/qedit.app/Contents/MacOS/qedit"
+  chmod +x "$bundle/macos/qedit.app/Contents/MacOS/qedit"
+  : > "$bundle/dmg/qedit_0.1.0_aarch64.dmg"
+}
+
 case "$STUB_MODE" in
+  ok)
+    emit_bundles
+    exit 0
+    ;;
   dmg-stage-then-ok)
     if [[ "\${CI-}" == "true" ]]; then
-      mkdir -p "$bundle/macos/qedit.app"
-      : > "$bundle/dmg/qedit_0.1.0_aarch64.dmg"
+      emit_bundles
       exit 0
     fi
     fail_dmg_stage
@@ -124,17 +145,36 @@ esac
 
 let workspace: string | undefined;
 
-function runBuildMac(mode: StubMode) {
+function runBuildMac(mode: StubMode, staleFinalDmgs: string[] = []) {
   workspace = mkdtempSync(join(tmpdir(), 'qedit-build-mac-'));
   const fakeRoot = join(workspace, 'project');
   const stubDir = join(workspace, 'stub');
   mkdirSync(join(fakeRoot, 'scripts'), { recursive: true });
+  mkdirSync(join(fakeRoot, 'src-tauri'), { recursive: true });
   mkdirSync(stubDir);
 
   copyFileSync(
     join(projectRoot, 'scripts', 'build-mac.sh'),
     join(fakeRoot, 'scripts', 'build-mac.sh'),
   );
+  writeFileSync(
+    join(fakeRoot, 'src-tauri', 'tauri.conf.json'),
+    JSON.stringify({ version: '0.1.0' }),
+  );
+  if (staleFinalDmgs.length > 0) {
+    const dmgDir = join(
+      fakeRoot,
+      'src-tauri',
+      'target',
+      'release',
+      'bundle',
+      'dmg',
+    );
+    mkdirSync(dmgDir, { recursive: true });
+    for (const name of staleFinalDmgs) {
+      writeFileSync(join(dmgDir, name), '');
+    }
+  }
   writeFileSync(join(stubDir, 'pnpm'), STUB_PNPM, { mode: 0o755 });
   chmodSync(join(stubDir, 'pnpm'), 0o755);
   writeFileSync(join(stubDir, 'invocations'), '');
@@ -145,8 +185,9 @@ function runBuildMac(mode: StubMode) {
     {
       encoding: 'utf-8',
       env: {
-        // A minimal PATH keeps a real rustup out of the stubbed run.
-        PATH: `${stubDir}:/usr/bin:/bin`,
+        // A minimal PATH keeps host tooling out of the stubbed run; node is
+        // needed because the script reads the version from tauri.conf.json.
+        PATH: `${stubDir}:${dirname(process.execPath)}:/usr/bin:/bin`,
         HOME: workspace,
         STUB_DIR: stubDir,
         STUB_PROJECT_ROOT: fakeRoot,
@@ -187,6 +228,17 @@ describe('macOS DMG build without Finder automation', () => {
     expect(run.output).toContain('without custom icon positioning');
     expect(run.appExists).toBe(true);
     expect(run.dmgFiles).toEqual(['qedit_0.1.0_aarch64.dmg']);
+  });
+
+  it('succeeds when a previous version left its final DMG behind', () => {
+    const run = runBuildMac('ok', ['qedit_0.0.9_aarch64.dmg']);
+
+    expect(run.status).toBe(0);
+    expect(run.appExists).toBe(true);
+    expect(run.dmgFiles).toEqual([
+      'qedit_0.0.9_aarch64.dmg',
+      'qedit_0.1.0_aarch64.dmg',
+    ]);
   });
 
   it('keeps other bundling failures fatal without a retry', () => {

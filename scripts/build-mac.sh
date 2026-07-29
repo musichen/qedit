@@ -42,9 +42,11 @@ run_bundler() {
 }
 
 cd "$PROJECT_ROOT"
-if command -v rustup >/dev/null 2>&1; then
-  rustup target add aarch64-apple-darwin x86_64-apple-darwin || true
-fi
+
+# tauri-bundler names the DMG after the tauri.conf.json version, and never
+# removes the finals of previous versions, so the assertion below has to look
+# for this build's artifact rather than count everything in the directory.
+APP_VERSION=$(node -p "JSON.parse(require('fs').readFileSync('src-tauri/tauri.conf.json', 'utf8')).version")
 
 if ! run_bundler; then
   if grep -Eq "$DMG_STAGE_FAILURE_PATTERN" "$BUILD_LOG"; then
@@ -62,19 +64,19 @@ if ! run_bundler; then
 fi
 
 APP_PATH="$BUNDLE_DIR/macos/qedit.app"
-if [[ ! -d "$APP_PATH" ]]; then
+if [[ ! -d "$APP_PATH" || ! -x "$APP_PATH/Contents/MacOS/qedit" ]]; then
   echo "Expected macOS app bundle was not produced: $APP_PATH" >&2
   exit 1
 fi
 
 shopt -s nullglob
 DMG_PATHS=()
-for candidate in "$BUNDLE_DIR"/dmg/*.dmg; do
+for candidate in "$BUNDLE_DIR"/dmg/*_"$APP_VERSION"_*.dmg; do
   [[ "$(basename "$candidate")" == rw.*.dmg ]] && continue
   DMG_PATHS+=("$candidate")
 done
 if (( ${#DMG_PATHS[@]} != 1 )); then
-  echo "Expected one final DMG bundle in $BUNDLE_DIR/dmg" >&2
+  echo "Expected one final DMG bundle for version $APP_VERSION in $BUNDLE_DIR/dmg" >&2
   exit 1
 fi
 
