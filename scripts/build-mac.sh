@@ -14,7 +14,9 @@ trap cleanup_dmg_temps EXIT
 cleanup_dmg_temps
 
 cd "$PROJECT_ROOT"
-rustup target add aarch64-apple-darwin x86_64-apple-darwin
+if command -v rustup >/dev/null 2>&1; then
+  rustup target add aarch64-apple-darwin x86_64-apple-darwin || true
+fi
 pnpm exec tauri build --bundles app,dmg
 
 APP_PATH="$BUNDLE_DIR/macos/qedit.app"
@@ -24,8 +26,12 @@ if [[ ! -d "$APP_PATH" ]]; then
 fi
 
 shopt -s nullglob
-DMG_PATHS=("$BUNDLE_DIR"/dmg/*.dmg)
-if (( ${#DMG_PATHS[@]} != 1 )) || [[ "$(basename "${DMG_PATHS[0]}")" == rw.*.dmg ]]; then
+DMG_PATHS=()
+for candidate in "$BUNDLE_DIR"/dmg/*.dmg; do
+  [[ "$(basename "$candidate")" == rw.*.dmg ]] && continue
+  DMG_PATHS+=("$candidate")
+done
+if (( ${#DMG_PATHS[@]} != 1 )); then
   echo "Expected one final DMG bundle in $BUNDLE_DIR/dmg" >&2
   exit 1
 fi

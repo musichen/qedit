@@ -27,6 +27,32 @@ describe('macOS packaging lifecycle', () => {
     expect(buildScript).toContain('trap cleanup_dmg_temps EXIT');
   });
 
+  it('excludes Tauri temp images from the final DMG assertion', () => {
+    const buildScript = readFileSync(
+      join(projectRoot, 'scripts', 'build-mac.sh'),
+      'utf-8',
+    );
+
+    const assertionStart = buildScript.indexOf('DMG_PATHS=()');
+    expect(assertionStart).toBeGreaterThan(-1);
+
+    const assertionBlock = buildScript.slice(assertionStart);
+    expect(assertionBlock).toMatch(
+      /== rw\.\*\.dmg \]\][\s\S]*continue[\s\S]*\$\{#DMG_PATHS\[@\]\} != 1/,
+    );
+  });
+
+  it('keeps macOS target installation tolerant of a missing rustup', () => {
+    const buildScript = readFileSync(
+      join(projectRoot, 'scripts', 'build-mac.sh'),
+      'utf-8',
+    );
+
+    expect(buildScript).toMatch(
+      /if command -v rustup[\s\S]*rustup target add aarch64-apple-darwin x86_64-apple-darwin \|\| true/,
+    );
+  });
+
   it('does not collect Tauri temporary images as release artifacts', () => {
     const releaseScript = readFileSync(
       join(projectRoot, 'scripts', 'release.sh'),
