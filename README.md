@@ -27,11 +27,15 @@ Monaco as the editing surface.
   saved - the status bar reports the reason. The status bar also shows the file
   path, cursor position, indentation, language, the current state (loading,
   unsaved, saving, saved, or failed), and any save error.
-- An integrated terminal sits below the editor and runs your `$SHELL`
+- An integrated terminal panel sits below the editor and runs your `$SHELL`
   (`%COMSPEC%` on Windows) in the open project directory, or your home directory
-  when no folder is open. It follows the workspace root, reports its state
-  (starting, ready, exited, or unavailable), and its shells are terminated when
-  the app exits. **Cmd/Ctrl+\`** moves focus between the editor and the terminal.
+  when no folder is open. It follows the workspace root, reports each tab's state
+  (starting, running, exited, or error), and its shells are terminated when the
+  app exits. **Cmd/Ctrl+\`** moves focus between the editor and the terminal.
+- The terminal panel supports multiple tabs: the **+** button opens another
+  session, double-click or **F2** renames a tab, drag-and-drop or
+  **Cmd/Ctrl+Arrow Left/Right** reorders tabs, and switching tabs keeps every
+  session's output and shell state alive in the background.
 
 ### Shortcuts
 
@@ -47,6 +51,10 @@ Monaco as the editing surface.
 | **Cmd/Ctrl+PageDown** / **Ctrl+Tab** | Next tab |
 | **Cmd/Ctrl+PageUp** / **Ctrl+Shift+Tab** | Previous tab |
 | **Cmd/Ctrl+\`** | Toggle focus between editor and terminal |
+| **Cmd/Ctrl+PageDown** / **Ctrl+Tab** (in terminal) | Next terminal tab |
+| **Cmd/Ctrl+PageUp** / **Ctrl+Shift+Tab** (in terminal) | Previous terminal tab |
+| **Cmd/Ctrl+1-9** (in terminal) | Jump to terminal tab N |
+| **Cmd/Ctrl+W** (in terminal) | Close active terminal tab |
 | **Cmd/Ctrl+P** | Quick open |
 | **Cmd/Ctrl+F** | Find in file |
 
