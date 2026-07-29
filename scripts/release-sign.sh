@@ -56,11 +56,11 @@ if [[ "$TARGET" == macos-* ]]; then
 
   KEYCHAIN="$OUT_DIR/qedit-signing.keychain-db"
   CERT_FILE="$OUT_DIR/qedit-signing.p12"
-  cleanup() {
+  cleanup_macos_keychain() {
     security delete-keychain "$KEYCHAIN" >/dev/null 2>&1 || true
     rm -f "$CERT_FILE"
   }
-  trap cleanup EXIT
+  trap cleanup_macos_keychain EXIT
   printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$CERT_FILE"
   security create-keychain -p "$APPLE_CERTIFICATE_PASSWORD" "$KEYCHAIN" >/dev/null
   security set-keychain-settings -lut 21600 "$KEYCHAIN"
@@ -94,8 +94,8 @@ command -v signtool >/dev/null 2>&1 || {
 }
 CERT_FILE="$OUT_DIR/qedit-signing.pfx"
 printf '%s' "$WINDOWS_CERTIFICATE_BASE64" | base64 --decode > "$CERT_FILE"
-cleanup() { rm -f "$CERT_FILE"; }
-trap cleanup EXIT
+cleanup_windows_cert() { rm -f "$CERT_FILE"; }
+trap cleanup_windows_cert EXIT
 for artifact in "$OUT_DIR"/*.msi "$OUT_DIR"/*.exe; do
   [[ -f "$artifact" ]] || continue
   signtool sign /fd SHA256 /f "$CERT_FILE" /p "$WINDOWS_CERTIFICATE_PASSWORD" /tr "$WINDOWS_TIMESTAMP_URL" /td SHA256 "$artifact"

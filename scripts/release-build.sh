@@ -34,7 +34,7 @@ metadata_version() {
 PACKAGE_VERSION=$(metadata_version "$PROJECT_ROOT/package.json")
 TAURI_VERSION=$(metadata_version "$PROJECT_ROOT/src-tauri/tauri.conf.json")
 CARGO_VERSION=$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$PROJECT_ROOT/src-tauri/Cargo.toml" | head -n 1)
-if [[ "$VERSION" != "$PACKAGE_VERSION" || "$VERSION" != "$TAURI_VERSION" || "$VERSION" != "$CARGO_VERSION" ]]; then
+if ! [[ "$VERSION" == "$PACKAGE_VERSION" && "$VERSION" == "$TAURI_VERSION" && "$VERSION" == "$CARGO_VERSION" ]]; then
   echo "Error: release version $VERSION does not match project metadata" >&2
   echo "  package.json: $PACKAGE_VERSION" >&2
   echo "  src-tauri/tauri.conf.json: $TAURI_VERSION" >&2
