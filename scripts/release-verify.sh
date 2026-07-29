@@ -62,16 +62,30 @@ NODE
     echo "Error: temporary DMG image found in release output: $rw_dmg" >&2
     exit 1
   done
-  if [[ "${QEDIT_REQUIRE_SIGNED:-}" == 1 && "$target" != linux-* ]]; then
-    [[ -s "$dir/signing.json" ]] || { echo "Error: signing status missing for $target" >&2; exit 1; }
-    node - "$dir/signing.json" "$target" <<'NODE'
+  [[ -s "$dir/signing.json" ]] || { echo "Error: signing status missing for $target" >&2; exit 1; }
+  node - "$dir/signing.json" "$dir/manifest.json" "$target" "$VERSION" "${QEDIT_REQUIRE_SIGNED:-}" <<'NODE'
 const fs = require('node:fs');
-const [path, target] = process.argv.slice(2);
+const [path, manifestPath, target, version, requireSigned] = process.argv.slice(2);
 const status = JSON.parse(fs.readFileSync(path, 'utf8'));
-const allowed = target.startsWith('macos-') ? 'signed-and-notarized' : 'signed';
-if (status.status !== allowed) throw new Error(`${target} is not ${allowed}: ${status.status} (${status.reason})`);
+const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+const allowed = target.startsWith('macos-')
+  ? ['unsigned', 'signed-and-notarized']
+  : target.startsWith('windows-')
+    ? ['unsigned', 'signed']
+    : ['not-applicable'];
+if (status.target !== target || status.version !== version || !allowed.includes(status.status) || typeof status.reason !== 'string' || status.reason.length === 0) {
+  throw new Error(`invalid signing metadata for ${target}: ${JSON.stringify(status)}`);
+}
+if (!manifest.signing || manifest.signing.status !== status.status || manifest.signing.reason !== status.reason) {
+  throw new Error(`manifest signing metadata does not match signing.json for ${target}`);
+}
+if (requireSigned === '1' && target.startsWith('macos-') && status.status !== 'signed-and-notarized') {
+  throw new Error(`${target} is not signed-and-notarized: ${status.status} (${status.reason})`);
+}
+if (requireSigned === '1' && target.startsWith('windows-') && status.status !== 'signed') {
+  throw new Error(`${target} is not signed: ${status.status} (${status.reason})`);
+}
 NODE
-  fi
   echo "verified $target: ${expected[*]}"
 }
 

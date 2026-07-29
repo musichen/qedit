@@ -38,16 +38,26 @@ require_values() {
   fi
 }
 
+has_any_value() {
+  local name
+  for name in "$@"; do
+    [[ -n "${!name:-}" ]] && return 0
+  done
+  return 1
+}
+
 if [[ "$TARGET" == linux-* ]]; then
   write_status 'not-applicable' 'Linux artifacts are not code signed by this pipeline'
   exit 0
 fi
 
 if [[ "$TARGET" == macos-* ]]; then
-  if [[ "${QEDIT_REQUIRE_SIGNING:-}" != 1 && -z "${APPLE_CERTIFICATE:-}" && -z "${APPLE_SIGNING_IDENTITY:-}" ]]; then
-    write_status 'unsigned' 'APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, and APPLE_TEAM_ID are not configured'
-    echo "warning: macOS artifacts are unsigned; set QEDIT_REQUIRE_SIGNING=1 to make this a release-blocking error" >&2
-    exit 0
+  if ! has_any_value APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; then
+    if [[ "${QEDIT_REQUIRE_SIGNING:-}" != 1 ]]; then
+      write_status 'unsigned' 'APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, and APPLE_TEAM_ID are not configured'
+      echo "warning: macOS artifacts are unsigned; set QEDIT_REQUIRE_SIGNING=1 to make this a release-blocking error" >&2
+      exit 0
+    fi
   fi
   require_values APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
   command -v security >/dev/null 2>&1 || { echo 'Error: macOS signing requires the security command' >&2; exit 1; }
@@ -83,10 +93,12 @@ if [[ "$TARGET" == macos-* ]]; then
   exit 0
 fi
 
-if [[ "${QEDIT_REQUIRE_SIGNING:-}" != 1 && -z "${WINDOWS_CERTIFICATE_BASE64:-}" ]]; then
-  write_status 'unsigned' 'WINDOWS_CERTIFICATE_BASE64 and WINDOWS_CERTIFICATE_PASSWORD are not configured'
-  echo "warning: Windows artifacts are unsigned; set QEDIT_REQUIRE_SIGNING=1 to make this a release-blocking error" >&2
-  exit 0
+if ! has_any_value WINDOWS_CERTIFICATE_BASE64 WINDOWS_CERTIFICATE_PASSWORD WINDOWS_TIMESTAMP_URL; then
+  if [[ "${QEDIT_REQUIRE_SIGNING:-}" != 1 ]]; then
+    write_status 'unsigned' 'WINDOWS_CERTIFICATE_BASE64, WINDOWS_CERTIFICATE_PASSWORD, and WINDOWS_TIMESTAMP_URL are not configured'
+    echo "warning: Windows artifacts are unsigned; set QEDIT_REQUIRE_SIGNING=1 to make this a release-blocking error" >&2
+    exit 0
+  fi
 fi
 require_values WINDOWS_CERTIFICATE_BASE64 WINDOWS_CERTIFICATE_PASSWORD WINDOWS_TIMESTAMP_URL
 command -v signtool >/dev/null 2>&1 || {

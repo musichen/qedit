@@ -20,11 +20,25 @@ require_values() {
   fi
 }
 
+has_any_value() {
+  local name
+  for name in "$@"; do
+    [[ -n "${!name:-}" ]] && return 0
+  done
+  return 1
+}
+
 case "$TARGET" in
   linux-*)
     echo "Linux signing preparation: not applicable"
     ;;
   macos-*)
+    if ! has_any_value APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; then
+      if [[ "${QEDIT_REQUIRE_SIGNING:-}" != 1 ]]; then
+        echo "warning: macOS signing credentials are absent; continuing as an unsigned public preview"
+        exit 0
+      fi
+    fi
     require_values APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
     command -v security >/dev/null 2>&1 || { echo 'Error: macOS signing requires the security command' >&2; exit 1; }
     KEYCHAIN_ROOT="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"

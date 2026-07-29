@@ -85,6 +85,16 @@ fi
 
 CONTRIBUTORS=$(git log --pretty=format:"%an" "${LAST_TAG:-$(git rev-list --max-parents=0 HEAD)}..HEAD" 2>/dev/null | sort -u | sed 's/^/- /' || true)
 [[ -n "$CONTRIBUTORS" ]] || CONTRIBUTORS="- (none)"
+SIGNING_SUMMARY=$(node - "$ARTIFACT_ROOT" <<'NODE'
+const fs = require('node:fs');
+const path = require('node:path');
+const root = process.argv[2];
+for (const target of ['macos-arm64', 'macos-x64', 'windows-arm64', 'windows-x64', 'linux-arm64', 'linux-x64']) {
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, target, 'manifest.json'), 'utf8'));
+  console.log(`- ${target}: ${manifest.signing.status} — ${manifest.signing.reason}`);
+}
+NODE
+)
 NOTES=$(cat <<EOF
 # v${VERSION}
 
@@ -93,6 +103,9 @@ ${CHANGES}
 
 ## Contributors
 ${CONTRIBUTORS}
+
+## Signing
+${SIGNING_SUMMARY}
 EOF
 )
 
@@ -101,6 +114,14 @@ echo "=== Release candidate ==="
 echo "Tag: v${VERSION}"
 echo "Artifacts:"
 find "$ARTIFACT_ROOT" -maxdepth 2 -type f \( -name 'qedit-v*' -o -name 'SHA256SUMS' -o -name 'provenance.json' \) -print | sort
+
+METADATA_ROOT="$ARTIFACT_ROOT/release-metadata"
+rm -rf "$METADATA_ROOT"
+mkdir -p "$METADATA_ROOT"
+for target in macos-arm64 macos-x64 windows-arm64 windows-x64 linux-arm64 linux-x64; do
+  cp "$ARTIFACT_ROOT/$target/manifest.json" "$METADATA_ROOT/qedit-v${VERSION}-${target}-manifest.json"
+  cp "$ARTIFACT_ROOT/$target/signing.json" "$METADATA_ROOT/qedit-v${VERSION}-${target}-signing.json"
+done
 
 echo ""
 echo "=== Creating tag v${VERSION} ==="
@@ -112,10 +133,10 @@ echo ""
 echo "=== Creating GitHub release ==="
 declare -a ARTIFACTS=()
 while IFS= read -r -d '' artifact; do ARTIFACTS+=("$artifact"); done < <(
-  find "$ARTIFACT_ROOT" -type f ! -name 'rw.*.dmg' \( -name 'qedit-v*.app.zip' -o -name 'qedit-v*.dmg' -o -name 'qedit-v*.msi' -o -name 'qedit-v*.exe' -o -name 'qedit-v*.deb' -o -name 'qedit-v*.AppImage' -o -name 'SHA256SUMS' -o -name 'provenance.json' \) -print0 | sort -z
+  find "$ARTIFACT_ROOT" -type f ! -name 'rw.*.dmg' \( -name 'qedit-v*.app.zip' -o -name 'qedit-v*.dmg' -o -name 'qedit-v*.msi' -o -name 'qedit-v*.exe' -o -name 'qedit-v*.deb' -o -name 'qedit-v*.AppImage' -o -name 'qedit-v*-manifest.json' -o -name 'qedit-v*-signing.json' -o -name 'SHA256SUMS' -o -name 'provenance.json' \) -print0 | sort -z
 )
-if (( ${#ARTIFACTS[@]} != 14 )); then
-  echo "Error: expected 12 platform artifacts plus SHA256SUMS and provenance.json, found ${#ARTIFACTS[@]}" >&2
+if (( ${#ARTIFACTS[@]} != 26 )); then
+  echo "Error: expected 12 platform artifacts, 12 per-target metadata files, SHA256SUMS, and provenance.json, found ${#ARTIFACTS[@]}" >&2
   exit 1
 fi
 "${RELEASE_CLI[@]}" release create "v${VERSION}" \
