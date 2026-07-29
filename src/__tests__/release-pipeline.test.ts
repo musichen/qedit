@@ -54,6 +54,15 @@ function createMatrix(version: string) {
         target,
         host: 'test',
         artifacts,
+        signing: {
+          status:
+            platform === 'macos'
+              ? 'signed-and-notarized'
+              : platform === 'windows'
+                ? 'signed'
+                : 'not-applicable',
+          reason: 'test fixture',
+        },
       })}\n`,
     );
     writeFileSync(
@@ -87,6 +96,29 @@ describe('release pipeline contract', () => {
     expect(workflow).toContain('ubuntu-24.04-arm');
     expect(workflow.match(/target: /g)).toHaveLength(6);
     expect(workflow).toContain('actions/attest-build-provenance@v2');
+    expect(workflow).toContain('QEDIT_REQUIRE_SIGNING');
+    expect(workflow).toContain('CI: true');
+    expect(workflow).toContain('path: dist/release');
+    expect(workflow).not.toContain('xdg-utils');
+  });
+
+  it('keeps Linux bundling headless and target verification scoped to its artifact directory', () => {
+    const releaseBuild = readFileSync(
+      join(projectRoot, 'scripts/release-build.sh'),
+      'utf8',
+    );
+    const workflow = readFileSync(
+      join(projectRoot, '.github/workflows/release.yml'),
+      'utf8',
+    );
+    expect(releaseBuild).toContain(
+      'CI=true NO_AT_BRIDGE=1 pnpm exec tauri build --bundles deb,appimage',
+    );
+    expect(releaseBuild).not.toContain('xdg-open');
+    expect(workflow).not.toContain("QEDIT_REQUIRE_SIGNED: '1'");
+    expect(workflow).toContain(
+      'dist/release/v${{ steps.version.outputs.version }}/${{ matrix.target }}',
+    );
   });
 
   it('verifies a complete matrix and emits checksums and provenance', () => {
@@ -132,6 +164,100 @@ describe('release pipeline contract', () => {
       );
       expect(result.status).not.toBe(0);
       expect(`${result.stdout}${result.stderr}`).toContain('windows-arm64');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('verifies a downloaded target directory and requires matching signing metadata', () => {
+    const root = createMatrix('0.1.0');
+    try {
+      const result = spawnSync(
+        'bash',
+        [
+          join(projectRoot, 'scripts/release-verify.sh'),
+          'linux-x64',
+          '0.1.0',
+          join(root, 'linux-x64'),
+        ],
+        { cwd: projectRoot, encoding: 'utf8' },
+      );
+      expect(result.status).toBe(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('records unsigned preview status when signing credentials are absent', () => {
+    const root = mkdtempSync(join(tmpdir(), 'qedit-signing-'));
+    const manifestPath = join(root, 'manifest.json');
+    try {
+      const prepare = spawnSync(
+        'bash',
+        [join(projectRoot, 'scripts/release-sign-prepare.sh'), 'macos-arm64'],
+        {
+          cwd: projectRoot,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            QEDIT_REQUIRE_SIGNING: '0',
+            APPLE_CERTIFICATE: '',
+            APPLE_CERTIFICATE_PASSWORD: '',
+            APPLE_SIGNING_IDENTITY: '',
+            APPLE_ID: '',
+            APPLE_PASSWORD: '',
+            APPLE_TEAM_ID: '',
+          },
+        },
+      );
+      expect(prepare.status).toBe(0);
+      expect(`${prepare.stdout}${prepare.stderr}`).toContain(
+        'unsigned public preview',
+      );
+      writeFileSync(
+        manifestPath,
+        `${JSON.stringify({
+          schema: 1,
+          product: 'qedit',
+          version: '0.1.0',
+          target: 'macos-arm64',
+          host: 'test',
+          artifacts: [],
+        })}\n`,
+      );
+      const result = spawnSync(
+        'bash',
+        [
+          join(projectRoot, 'scripts/release-sign.sh'),
+          'macos-arm64',
+          '0.1.0',
+          root,
+        ],
+        {
+          cwd: projectRoot,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            QEDIT_REQUIRE_SIGNING: '0',
+            APPLE_CERTIFICATE: '',
+            APPLE_CERTIFICATE_PASSWORD: '',
+            APPLE_SIGNING_IDENTITY: '',
+            APPLE_ID: '',
+            APPLE_PASSWORD: '',
+            APPLE_TEAM_ID: '',
+          },
+        },
+      );
+      expect(result.status).toBe(0);
+      const status = JSON.parse(
+        readFileSync(join(root, 'signing.json'), 'utf8'),
+      );
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+      expect(status.status).toBe('unsigned');
+      expect(manifest.signing).toEqual({
+        status: status.status,
+        reason: status.reason,
+      });
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

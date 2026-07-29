@@ -86,11 +86,23 @@ pnpm run release:dry -- 0.1.0
 ```
 
 The normal path is to commit matching version metadata on a non-default branch
-and let `.github/workflows/release.yml` build, sign/notarize, verify, attest,
-and publish all six targets. macOS produces `.app.zip` plus `.dmg`; Windows
-produces MSI and NSIS installers; Linux produces DEB and AppImage. Signing is
-never inferred: missing configured secrets fail the publish job with the exact
-credential list.
+and let `.github/workflows/release.yml` build, verify, attest, and publish all
+six targets. macOS produces `.app.zip` plus `.dmg`; Windows produces MSI and
+NSIS installers; Linux produces DEB and AppImage. The default is an explicitly
+unsigned public preview: missing signing secrets do not block the build, and
+each manifest, signing record, and release note names the actual status. To
+make signing a release-blocking requirement, set the repository Actions
+variable `QEDIT_REQUIRE_SIGNING=1` and configure every required secret:
+
+- macOS: `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`,
+  `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`
+- Windows: `WINDOWS_CERTIFICATE_BASE64`, `WINDOWS_CERTIFICATE_PASSWORD`,
+  `WINDOWS_TIMESTAMP_URL`
+
+Linux packages remain `not-applicable` for code signing. A missing or partial
+credential set never produces a signed status; it either records an unsigned
+preview or fails with the exact missing values when signed publishing is
+enabled.
 
 For a verified local matrix:
 
