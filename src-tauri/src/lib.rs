@@ -92,6 +92,17 @@ fn shell_command() -> Result<String, String> {
     }
 }
 
+fn build_shell_command(cwd: PathBuf) -> Result<CommandBuilder, String> {
+    let mut command = CommandBuilder::new(shell_command()?);
+    command.cwd(cwd);
+    // Interactive shells use TERM to select the cursor, erase, and redraw
+    // sequences that xterm.js must render. A GUI-launched Tauri process often
+    // has no inherited terminal environment, so make the PTY type explicit.
+    command.env("TERM", "xterm-256color");
+
+    Ok(command)
+}
+
 #[tauri::command]
 fn terminal_spawn<R: Runtime>(
     app: tauri::AppHandle<R>,
@@ -101,7 +112,7 @@ fn terminal_spawn<R: Runtime>(
     rows: u16,
 ) -> Result<u32, String> {
     let cwd = safe_home_path(&cwd)?;
-    let shell = shell_command()?;
+    let command = build_shell_command(cwd)?;
     let pty = native_pty_system()
         .openpty(PtySize {
             rows: rows.max(2),
@@ -110,8 +121,6 @@ fn terminal_spawn<R: Runtime>(
             pixel_height: 0,
         })
         .map_err(|error| format!("Could not create terminal: {error}"))?;
-    let mut command = CommandBuilder::new(shell);
-    command.cwd(cwd);
     let mut child = pty
         .slave
         .spawn_command(command)
@@ -363,42 +372,173 @@ mod tests {
             .expect("failed to build mock app")
     }
 
+    /// Prompt the rc-free test shell renders, used to prove its line editor is
+    /// live before control characters are written.
+    const EDITING_PROMPT: &str = "QEDIT_PROMPT> ";
+
     fn field(payload: &str, key: &str) -> serde_json::Value {
         serde_json::from_str::<serde_json::Value>(payload).unwrap()[key].clone()
     }
 
-    /// Drain terminal output until `marker` shows up, returning the transcript.
-    fn read_until(rx: &Receiver<String>, marker: &str) -> String {
-        let deadline = Instant::now() + Duration::from_secs(10);
-        let mut transcript = String::new();
+    /// Accumulates terminal output so successive waits advance through one
+    /// stream instead of each starting from an empty transcript.
+    struct TerminalTranscript {
+        rx: Receiver<String>,
+        seen: String,
+        cursor: usize,
+    }
 
-        while Instant::now() < deadline {
-            match rx.recv_timeout(Duration::from_millis(500)) {
-                Ok(chunk) => {
-                    transcript.push_str(&chunk);
-
-                    if transcript.contains(marker) {
-                        return transcript;
-                    }
-                }
-                Err(_) => continue,
+    impl TerminalTranscript {
+        fn new(rx: Receiver<String>) -> Self {
+            Self {
+                rx,
+                seen: String::new(),
+                cursor: 0,
             }
         }
 
-        panic!("timed out waiting for {marker:?}; transcript so far: {transcript:?}");
+        /// Wait for the next occurrence of `marker` after everything already
+        /// matched, advancing past it.
+        fn wait_for(&mut self, marker: &str) {
+            let deadline = Instant::now() + Duration::from_secs(10);
+
+            loop {
+                if let Some(offset) = self.seen[self.cursor..].find(marker) {
+                    self.cursor += offset + marker.len();
+
+                    return;
+                }
+
+                if Instant::now() >= deadline {
+                    panic!(
+                        "timed out waiting for {marker:?}; transcript so far: {:?}",
+                        self.seen
+                    );
+                }
+
+                if let Ok(chunk) = self.rx.recv_timeout(Duration::from_millis(500)) {
+                    self.seen.push_str(&chunk);
+                }
+            }
+        }
+    }
+
+    /// Kills its session on drop, so a failed or timed-out assertion cannot
+    /// leave a live shell behind.
+    struct SessionGuard {
+        state: SharedTerminalState,
+        session_id: u32,
+    }
+
+    impl SessionGuard {
+        fn new(state: &State<'_, SharedTerminalState>, session_id: u32) -> Self {
+            Self {
+                state: Arc::clone(state.inner()),
+                session_id,
+            }
+        }
+    }
+
+    impl Drop for SessionGuard {
+        fn drop(&mut self) {
+            let session = match self.state.lock() {
+                Ok(mut terminals) => terminals.sessions.remove(&self.session_id),
+                Err(_) => return,
+            };
+
+            if let Some(session) = session {
+                session.kill();
+            }
+        }
+    }
+
+    fn listen_for_output(handle: &tauri::AppHandle<MockRuntime>) -> TerminalTranscript {
+        let (output_tx, output_rx) = channel::<String>();
+        handle.listen("terminal://output", move |event| {
+            let data = field(event.payload(), "data");
+            let _ = output_tx.send(data.as_str().unwrap_or_default().to_string());
+        });
+
+        TerminalTranscript::new(output_rx)
+    }
+
+    fn bash_path() -> String {
+        let mut roots: Vec<PathBuf> = std::env::var_os("PATH")
+            .map(|path| std::env::split_paths(&path).collect())
+            .unwrap_or_default();
+        roots.push(PathBuf::from("/bin"));
+        roots.push(PathBuf::from("/usr/bin"));
+
+        roots
+            .iter()
+            .map(|root| root.join("bash"))
+            .find(|candidate| candidate.is_file())
+            .map(|candidate| candidate.display().to_string())
+            .expect("terminal editing tests need bash for a deterministic line editor")
+    }
+
+    /// Hand the PTY over to an rc-free bash in emacs editing mode. The editing
+    /// assertions then depend only on the PTY seam, never on the developer's
+    /// `$SHELL`, shell rc files, or `~/.inputrc`.
+    ///
+    /// The handoff carries its own prompt through the environment (`\076` is
+    /// the `>` bash renders, so the outer shell's echo of this line can never
+    /// be mistaken for the prompt itself). Waiting for that prompt proves the
+    /// exec completed before any further input is written, so an outer shell
+    /// that buffered typeahead cannot swallow the setup line.
+    fn start_rc_free_shell(
+        state: &State<'_, SharedTerminalState>,
+        session_id: u32,
+        output: &mut TerminalTranscript,
+    ) {
+        terminal_write(
+            state.clone(),
+            session_id,
+            format!(
+                "exec env INPUTRC=/dev/null 'PS1=QEDIT_PROMPT\\076 ' {} --norc --noprofile -i\n",
+                bash_path()
+            ),
+        )
+        .expect("terminal should accept the rc-free shell handoff");
+        output.wait_for(EDITING_PROMPT);
+
+        terminal_write(
+            state.clone(),
+            session_id,
+            concat!(
+                "set -o emacs; set +H; set +o history; unset HISTFILE; ",
+                "bind '\"\\e[3~\": delete-char'; PS2=''\n"
+            )
+            .to_string(),
+        )
+        .expect("terminal should accept the editing-mode setup");
+        output.wait_for(EDITING_PROMPT);
+    }
+
+    /// Type one line into the rc-free shell and assert on what it printed.
+    /// Every call starts and ends with a rendered prompt, so readline provably
+    /// owns the tty before any control character is sent and the cases never
+    /// fall through to the tty's canonical-mode editing.
+    fn edit_line(
+        state: &State<'_, SharedTerminalState>,
+        session_id: u32,
+        output: &mut TerminalTranscript,
+        keys: &str,
+        expected: &str,
+    ) {
+        terminal_write(state.clone(), session_id, keys.to_string())
+            .expect("terminal should accept editing input");
+        output.wait_for(expected);
+        output.wait_for(EDITING_PROMPT);
     }
 
     #[test]
     fn terminal_session_runs_commands_resizes_and_cleans_up() {
         let app = test_app();
         let handle = app.handle().clone();
-        let (output_tx, output_rx) = channel::<String>();
+        let mut output = listen_for_output(&handle);
         let (exit_tx, exit_rx) = channel::<Option<u32>>();
 
-        handle.listen("terminal://output", move |event| {
-            let data = field(event.payload(), "data");
-            let _ = output_tx.send(data.as_str().unwrap_or_default().to_string());
-        });
         handle.listen("terminal://exit", move |event| {
             let code = field(event.payload(), "code");
             let _ = exit_tx.send(code.as_u64().map(|value| value as u32));
@@ -416,6 +556,7 @@ mod tests {
         .expect("terminal should spawn");
 
         let state = handle.state::<SharedTerminalState>();
+        let _guard = SessionGuard::new(&state, session_id);
 
         terminal_write(
             state.clone(),
@@ -423,13 +564,8 @@ mod tests {
             "printf 'qedit-p%s:%s\\n' 'wd' \"$PWD\"\n".to_string(),
         )
         .expect("terminal should accept input");
-        let transcript = read_until(&output_rx, "qedit-pwd:");
-        println!("--- terminal transcript ---\n{transcript}\n--- end transcript ---");
         let canonical_project = std::fs::canonicalize(&project).unwrap();
-        assert!(
-            transcript.contains(&format!("qedit-pwd:{}", canonical_project.display())),
-            "shell should start in the project directory, got: {transcript:?}"
-        );
+        output.wait_for(&format!("qedit-pwd:{}", canonical_project.display()));
 
         terminal_resize(state.clone(), session_id, 120, 40).expect("terminal should resize");
         terminal_write(
@@ -438,12 +574,7 @@ mod tests {
             "printf 'qedit-si%s:%s\\n' 'ze' \"$(stty size)\"\n".to_string(),
         )
         .expect("terminal should accept input");
-        let resized = read_until(&output_rx, "qedit-size:");
-        println!("--- resize transcript ---\n{resized}\n--- end transcript ---");
-        assert!(
-            resized.contains("qedit-size:40 120"),
-            "resize should reach the PTY, got: {resized:?}"
-        );
+        output.wait_for("qedit-size:40 120");
 
         terminal_close(state.clone(), session_id).expect("terminal should close");
         exit_rx
@@ -458,6 +589,121 @@ mod tests {
             terminal_write(state, session_id, "echo late\n".to_string()),
             Err("Terminal session is closed".to_string())
         );
+    }
+
+    #[test]
+    fn spawned_shell_command_declares_a_terminal_type() {
+        let command = build_shell_command(PathBuf::from(env!("CARGO_MANIFEST_DIR")))
+            .expect("shell command should build");
+
+        assert_eq!(
+            command.get_env("TERM"),
+            Some(std::ffi::OsStr::new("xterm-256color")),
+            "GUI-launched shells inherit no terminal type, so the PTY must declare one"
+        );
+    }
+
+    #[test]
+    fn interactive_terminal_sets_term_for_line_editing() {
+        let app = test_app();
+        let handle = app.handle().clone();
+        let mut output = listen_for_output(&handle);
+
+        let session_id = terminal_spawn(
+            handle.clone(),
+            handle.state::<SharedTerminalState>(),
+            env!("CARGO_MANIFEST_DIR").to_string(),
+            80,
+            24,
+        )
+        .expect("terminal should spawn");
+
+        let state = handle.state::<SharedTerminalState>();
+        let _guard = SessionGuard::new(&state, session_id);
+        start_rc_free_shell(&state, session_id, &mut output);
+
+        terminal_write(
+            state.clone(),
+            session_id,
+            "printf '__QEDIT_TERM__%s\\n' \"${TERM:-unset}\"\n".to_string(),
+        )
+        .expect("terminal should accept input");
+        output.wait_for("__QEDIT_TERM__xterm-256color");
+
+        terminal_close(state, session_id).expect("terminal should close");
+    }
+
+    #[test]
+    fn terminal_interactive_editing_round_trip_handles_text_and_controls() {
+        let app = test_app();
+        let handle = app.handle().clone();
+        let mut output = listen_for_output(&handle);
+
+        let session_id = terminal_spawn(
+            handle.clone(),
+            handle.state::<SharedTerminalState>(),
+            env!("CARGO_MANIFEST_DIR").to_string(),
+            120,
+            40,
+        )
+        .expect("terminal should spawn");
+
+        let state = handle.state::<SharedTerminalState>();
+        let _guard = SessionGuard::new(&state, session_id);
+        start_rc_free_shell(&state, session_id, &mut output);
+
+        edit_line(
+            &state,
+            session_id,
+            &mut output,
+            "printf 'QEDIT_ASCII_RESULT:%s\\n' 'ascii spaces !'\n",
+            "QEDIT_ASCII_RESULT:ascii spaces !",
+        );
+
+        edit_line(
+            &state,
+            session_id,
+            &mut output,
+            "printf 'QEDIT_UTF8_RESULT:%s\\n' 'café 世界'\n",
+            "QEDIT_UTF8_RESULT:café 世界",
+        );
+
+        edit_line(
+            &state,
+            session_id,
+            &mut output,
+            "printf 'QEDIT_BACKSPACE_RESULT:%s\\n' abc--def\x7f\x7f\x7fXYZ\n",
+            "QEDIT_BACKSPACE_RESULT:abc--XYZ",
+        );
+
+        edit_line(
+            &state,
+            session_id,
+            &mut output,
+            "printf 'QEDIT_DELETE_RESULT:%s\\n' abc\x1b[D\x1b[D\x1b[3~X\n",
+            "QEDIT_DELETE_RESULT:aXc",
+        );
+
+        // Ctrl-A must move the caret to the start for `printf ` to become the
+        // command word, and Ctrl-E must move it back to the end for `def` to
+        // land on the argument. Either key being dropped changes the output.
+        edit_line(
+            &state,
+            session_id,
+            &mut output,
+            "'QEDIT_HOME_END_RESULT:%s\\n' abc\x01printf \x05def\n",
+            "QEDIT_HOME_END_RESULT:abcdef",
+        );
+
+        edit_line(
+            &state,
+            session_id,
+            &mut output,
+            "stale\x15printf 'QEDIT_CTRL_RESULT:%s\\n' ok\n",
+            "QEDIT_CTRL_RESULT:ok",
+        );
+
+        terminal_close(state, session_id).expect("terminal should close");
     }
 
     #[test]
