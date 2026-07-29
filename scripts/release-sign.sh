@@ -56,6 +56,7 @@ if [[ "$TARGET" == macos-* ]]; then
 
   KEYCHAIN="$OUT_DIR/qedit-signing.keychain-db"
   CERT_FILE="$OUT_DIR/qedit-signing.p12"
+  # shellcheck disable=SC2317,SC2329 # invoked indirectly via `trap ... EXIT` below
   cleanup_macos_keychain() {
     security delete-keychain "$KEYCHAIN" >/dev/null 2>&1 || true
     rm -f "$CERT_FILE"
