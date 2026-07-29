@@ -102,18 +102,47 @@ fn configured_shell(shell: Option<&OsStr>, account_shell: Option<&OsStr>) -> OsS
 #[cfg(unix)]
 fn account_shell() -> Option<OsString> {
     use std::ffi::CStr;
+    use std::mem::MaybeUninit;
 
     // A GUI-launched Tauri process often does not inherit SHELL. Read the
     // account's configured shell directly, matching the platform terminal's
-    // fallback instead of assuming that every user runs zsh.
-    let passwd = unsafe { libc::getpwuid(libc::getuid()) };
-    if passwd.is_null() {
+    // fallback instead of assuming that every user runs zsh. getpwuid_r (with
+    // caller-owned storage) is used instead of getpwuid because the latter
+    // returns a pointer into libc's non-reentrant static buffer: Tauri
+    // dispatches commands on a thread pool, so two concurrent terminal_spawn
+    // calls could otherwise race on the same static passwd storage.
+    let mut passwd = MaybeUninit::<libc::passwd>::uninit();
+    let mut result: *mut libc::passwd = std::ptr::null_mut();
+    let mut buffer_len: usize = 1024;
+
+    loop {
+        let mut buffer = vec![0i8; buffer_len];
+        let status = unsafe {
+            libc::getpwuid_r(
+                libc::getuid(),
+                passwd.as_mut_ptr(),
+                buffer.as_mut_ptr(),
+                buffer.len(),
+                &mut result,
+            )
+        };
+
+        if status == 0 {
+            if result.is_null() {
+                return None;
+            }
+            let shell = unsafe { CStr::from_ptr((*passwd.as_ptr()).pw_shell) };
+            let shell = shell.to_str().ok()?.trim();
+            return (!shell.is_empty()).then(|| OsString::from(shell));
+        }
+
+        if status == libc::ERANGE && buffer_len < 1 << 20 {
+            buffer_len *= 2;
+            continue;
+        }
+
         return None;
     }
-
-    let shell = unsafe { CStr::from_ptr((*passwd).pw_shell) };
-    let shell = shell.to_str().ok()?.trim();
-    (!shell.is_empty()).then(|| OsString::from(shell))
 }
 
 #[cfg(windows)]
@@ -122,10 +151,26 @@ fn account_shell() -> Option<OsString> {
 }
 
 fn shell_command() -> OsString {
-    configured_shell(
-        std::env::var_os("SHELL").as_deref(),
-        account_shell().as_deref(),
-    )
+    let shell = std::env::var_os("SHELL").filter(|value| !value.is_empty());
+    if let Some(shell) = shell {
+        return configured_shell(Some(shell.as_os_str()), None);
+    }
+    configured_shell(None, account_shell().as_deref())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn shell_family(shell: &OsStr) -> &'static str {
+    let name = Path::new(shell)
+        .file_name()
+        .and_then(OsStr::to_str)
+        .unwrap_or("");
+
+    match name {
+        "bash" | "zsh" | "sh" | "dash" | "ksh" | "fish" => "posix",
+        "csh" | "tcsh" => "csh",
+        "pwsh" | "pwsh-preview" | "powershell" => "pwsh",
+        _ => "unknown",
+    }
 }
 
 fn shell_arguments(shell: &OsStr) -> &'static [&'static str] {
@@ -137,11 +182,18 @@ fn shell_arguments(shell: &OsStr) -> &'static [&'static str] {
 
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = shell;
         // One direct shell process gets both login and interactive startup.
         // Do not invoke `sh -c "$SHELL -il"`: that would duplicate startup
         // and can recurse when a user's startup file launches the shell.
-        &["-il"]
+        // Combined "-il" is only valid for POSIX-family shells; csh/tcsh
+        // reject the combined form (login must be the sole flag) and pwsh
+        // has no equivalent flag at all, so an unconditional "-il" would
+        // make those shells exit immediately instead of starting a terminal.
+        match shell_family(shell) {
+            "posix" => &["-il"],
+            "csh" => &["-l"],
+            _ => &[],
+        }
     }
 }
 
@@ -503,8 +555,24 @@ mod tests {
     #[cfg(not(target_os = "windows"))]
     #[test]
     fn posix_shells_get_login_and_interactive_startup_flags() {
-        for shell in ["/bin/zsh", "/bin/bash"] {
+        for shell in ["/bin/zsh", "/bin/bash", "/bin/sh", "/bin/dash", "/bin/ksh", "/usr/bin/fish"] {
             assert_eq!(shell_arguments(OsStr::new(shell)), &["-il"]);
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn csh_family_gets_login_only_startup_flag() {
+        for shell in ["/bin/csh", "/bin/tcsh"] {
+            assert_eq!(shell_arguments(OsStr::new(shell)), &["-l"]);
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn non_posix_and_unknown_shells_get_no_startup_flags() {
+        for shell in ["/usr/bin/pwsh", "/usr/local/bin/nu"] {
+            assert!(shell_arguments(OsStr::new(shell)).is_empty());
         }
     }
 
