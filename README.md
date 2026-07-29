@@ -69,3 +69,38 @@ desktop shell, `pnpm run check` for the fast validation pipeline, and
 `pnpm run verify` for a native build plus smoke launch.
 
 See `AGENTS.md` for the full command reference and architecture notes.
+
+## Release operator sequence
+
+Releases use native runners: `macos-14` and `macos-15-intel`,
+`windows-11-arm` and `windows-2022`, and `ubuntu-24.04-arm` and
+`ubuntu-24.04`. The workflow refuses cross-compilation and partial matrices.
+Windows ARM is a GitHub-hosted public-preview runner; if it is unavailable,
+provision a self-hosted Windows ARM64 runner with `self-hosted,windows,ARM64`
+labels or report that target as unsupported.
+
+For a local dry-run:
+
+```sh
+pnpm run release:dry -- 0.1.0
+```
+
+The normal path is to commit matching version metadata on a non-default branch
+and let `.github/workflows/release.yml` build, sign/notarize, verify, attest,
+and publish all six targets. macOS produces `.app.zip` plus `.dmg`; Windows
+produces MSI and NSIS installers; Linux produces DEB and AppImage. Signing is
+never inferred: missing configured secrets fail the publish job with the exact
+credential list.
+
+For a verified local matrix:
+
+```sh
+QEDIT_REQUIRE_SIGNED=1 pnpm run release:verify -- all 0.1.0
+QEDIT_RELEASE_ARTIFACTS=dist/release/v0.1.0 pnpm run release -- 0.1.0
+```
+
+If an upload fails after the tag exists, do not overwrite the artifact
+directory. Re-run verification, inspect `gh-axi release view v<version>`, and
+upload only missing assets with `gh-axi release upload v<version> <files...>`.
+For a bad immutable release, confirm the exact tag, then use
+`gh-axi release delete` and recreate it; never force-push a release tag.

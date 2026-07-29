@@ -33,6 +33,10 @@
     "build:all": "bash scripts/build-all.sh",
     "db:generate": "pnpm --filter @qedit/db generate",
     "db:migrate": "pnpm --filter @qedit/db migrate",
+    "release:build": "bash scripts/release-build.sh",
+    "release:sign:prepare": "bash scripts/release-sign-prepare.sh",
+    "release:sign": "bash scripts/release-sign.sh",
+    "release:verify": "bash scripts/release-verify.sh",
     "release": "bash scripts/release.sh",
     "release:dry": "DRY_RUN=1 bash scripts/release.sh"
   },
