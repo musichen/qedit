@@ -35,7 +35,6 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 | `pnpm run test` | Root Vitest plus package tests via Turbo |
 | `pnpm run build` | Root Vite production build |
 | `pnpm run build:native` | Full Tauri desktop build (Rust + frontend) |
-| `pnpm run build:mac` | macOS `.app` + `.dmg` build with stale DMG staging cleanup |
 | `pnpm run db:generate` | drizzle-kit generate migrations |
 
 ### Check & verify pipeline
