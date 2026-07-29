@@ -112,6 +112,10 @@ fn terminal_spawn<R: Runtime>(
         .map_err(|error| format!("Could not create terminal: {error}"))?;
     let mut command = CommandBuilder::new(shell);
     command.cwd(cwd);
+    // Interactive shells use TERM to select the cursor, erase, and redraw
+    // sequences that xterm.js must render. A GUI-launched Tauri process often
+    // has no inherited terminal environment, so make the PTY type explicit.
+    command.env("TERM", "xterm-256color");
     let mut child = pty
         .slave
         .spawn_command(command)
@@ -458,6 +462,127 @@ mod tests {
             terminal_write(state, session_id, "echo late\n".to_string()),
             Err("Terminal session is closed".to_string())
         );
+    }
+
+    #[test]
+    fn interactive_terminal_sets_term_for_line_editing() {
+        let app = test_app();
+        let handle = app.handle().clone();
+        let (output_tx, output_rx) = channel::<String>();
+
+        handle.listen("terminal://output", move |event| {
+            let data = field(event.payload(), "data");
+            let _ = output_tx.send(data.as_str().unwrap_or_default().to_string());
+        });
+
+        let session_id = terminal_spawn(
+            handle.clone(),
+            handle.state::<SharedTerminalState>(),
+            env!("CARGO_MANIFEST_DIR").to_string(),
+            80,
+            24,
+        )
+        .expect("terminal should spawn");
+
+        terminal_write(
+            handle.state::<SharedTerminalState>(),
+            session_id,
+            "printf '__QEDIT_TERM__%s\\n' \"${TERM:-unset}\"\n".to_string(),
+        )
+        .expect("terminal should accept input");
+
+        let transcript = read_until(&output_rx, "__QEDIT_TERM__xterm-256color");
+        assert!(
+            transcript.contains("__QEDIT_TERM__xterm-256color"),
+            "interactive shells need a terminal type for correct cursor editing, got: {transcript:?}"
+        );
+
+        terminal_close(handle.state::<SharedTerminalState>(), session_id)
+            .expect("terminal should close");
+    }
+
+    #[test]
+    fn terminal_interactive_editing_round_trip_handles_text_and_controls() {
+        let app = test_app();
+        let handle = app.handle().clone();
+        let (output_tx, output_rx) = channel::<String>();
+
+        handle.listen("terminal://output", move |event| {
+            let data = field(event.payload(), "data");
+            let _ = output_tx.send(data.as_str().unwrap_or_default().to_string());
+        });
+
+        let session_id = terminal_spawn(
+            handle.clone(),
+            handle.state::<SharedTerminalState>(),
+            env!("CARGO_MANIFEST_DIR").to_string(),
+            120,
+            40,
+        )
+        .expect("terminal should spawn");
+        let state = handle.state::<SharedTerminalState>();
+
+        terminal_write(
+            state.clone(),
+            session_id,
+            "printf 'QEDIT_ASCII_RESULT:%s\\n' 'ascii spaces !'\n".to_string(),
+        )
+        .expect("ASCII input should be accepted");
+        let _ = read_until(&output_rx, "QEDIT_ASCII_RESULT:ascii spaces !");
+
+        terminal_write(
+            state.clone(),
+            session_id,
+            "printf 'QEDIT_UTF8_RESULT:%s\\n' 'café 世界'\n".to_string(),
+        )
+        .expect("UTF-8 input should be accepted");
+        let _ = read_until(&output_rx, "QEDIT_UTF8_RESULT:café 世界");
+
+        terminal_write(
+            state.clone(),
+            session_id,
+            "printf 'QEDIT_BACKSPACE_RESULT:%s\\n' abc--def".to_string(),
+        )
+        .expect("backspace test input should be accepted");
+        terminal_write(state.clone(), session_id, "\x7f\x7f\x7fXYZ\n".to_string())
+            .expect("backspace input should be accepted");
+        let _ = read_until(&output_rx, "QEDIT_BACKSPACE_RESULT:abc--XYZ");
+
+        terminal_write(
+            state.clone(),
+            session_id,
+            "printf 'QEDIT_DELETE_RESULT:%s\\n' abc".to_string(),
+        )
+        .expect("delete test input should be accepted");
+        terminal_write(
+            state.clone(),
+            session_id,
+            "\x1b[D\x1b[D\x1b[3~X\n".to_string(),
+        )
+        .expect("delete input should be accepted");
+        let _ = read_until(&output_rx, "QEDIT_DELETE_RESULT:aXc");
+
+        terminal_write(
+            state.clone(),
+            session_id,
+            "printf 'QEDIT_HOME_END_RESULT:%s\\n' abc".to_string(),
+        )
+        .expect("home/end test input should be accepted");
+        terminal_write(state.clone(), session_id, "\x01\x05XYZ\n".to_string())
+            .expect("home/end input should be accepted");
+        let _ = read_until(&output_rx, "QEDIT_HOME_END_RESULT:abcXYZ");
+
+        terminal_write(state.clone(), session_id, "stale\x15".to_string())
+            .expect("control shortcut input should be accepted");
+        terminal_write(
+            state.clone(),
+            session_id,
+            "printf 'QEDIT_CTRL_RESULT:%s\\n' ok\n".to_string(),
+        )
+        .expect("control shortcut replacement should be accepted");
+        let _ = read_until(&output_rx, "QEDIT_CTRL_RESULT:ok");
+
+        terminal_close(state, session_id).expect("terminal should close");
     }
 
     #[test]
