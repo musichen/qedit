@@ -1,35 +1,35 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Tauri's default DMG bundler runs Finder AppleScript to arrange icons. That
-# requires an interactive GUI session and is unavailable in CI/headless hosts.
-# tauri-bundler skips that step when CI is set, so the dmg target stays
-# reproducible and valid on both developer machines and headless runners.
-#
-# The app target is requested explicitly: when only dmg is asked for, the
-# bundler treats qedit.app as a throwaway intermediate and deletes it in its
-# "Cleaning" step, so the .app assertion below (and smoke:native) would have
-# nothing left to inspect.
-CI=true pnpm exec tauri build --bundles app,dmg
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BUNDLE_DIR="$PROJECT_ROOT/src-tauri/target/release/bundle"
 
-APP_BUNDLE="src-tauri/target/release/bundle/macos/qedit.app"
-DMG_DIR="src-tauri/target/release/bundle/dmg"
+cleanup_dmg_temps() {
+  if [[ -d "$BUNDLE_DIR" ]]; then
+    find "$BUNDLE_DIR" -type f -name 'rw.*.dmg' -exec rm -f {} +
+  fi
+}
 
-if [[ ! -d "$APP_BUNDLE" || ! -x "$APP_BUNDLE/Contents/MacOS/qedit" ]]; then
-  echo "macOS build: app bundle not found: $APP_BUNDLE" >&2
+trap cleanup_dmg_temps EXIT
+cleanup_dmg_temps
+
+cd "$PROJECT_ROOT"
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+pnpm exec tauri build --bundles app,dmg
+
+APP_PATH="$BUNDLE_DIR/macos/qedit.app"
+if [[ ! -d "$APP_PATH" ]]; then
+  echo "Expected macOS app bundle was not produced: $APP_PATH" >&2
   exit 1
 fi
 
-# Discover the artifact instead of predicting its name: tauri-bundler derives
-# the version from tauri.conf.json and labels the architecture itself (x64 on
-# Intel, aarch64 on Apple Silicon).
-declare -a DMGS=()
-while IFS= read -r -d '' dmg; do
-  DMGS+=("$dmg")
-done < <(find "$DMG_DIR" -maxdepth 1 -type f -name '*.dmg' -print0 2>/dev/null)
-if [[ ${#DMGS[@]} -eq 0 ]]; then
-  echo "macOS build: DMG not produced in $DMG_DIR" >&2
+shopt -s nullglob
+DMG_PATHS=("$BUNDLE_DIR"/dmg/*.dmg)
+if (( ${#DMG_PATHS[@]} != 1 )) || [[ "$(basename "${DMG_PATHS[0]}")" == rw.*.dmg ]]; then
+  echo "Expected one final DMG bundle in $BUNDLE_DIR/dmg" >&2
   exit 1
 fi
 
-printf 'macOS build: %s\n' "${DMGS[@]}"
+echo "Finished macOS bundles:"
+echo "  $APP_PATH"
+echo "  ${DMG_PATHS[0]}"
