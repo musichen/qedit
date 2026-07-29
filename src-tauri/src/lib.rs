@@ -223,7 +223,7 @@ fn terminal_environment(cwd: &Path, cols: u16, rows: u16) -> Vec<(&'static str, 
     ]
 }
 
-fn shell_command_builder(
+fn build_shell_command(
     shell: OsString,
     cwd: &Path,
     cols: u16,
@@ -249,17 +249,6 @@ fn shell_command_builder(
     command
 }
 
-fn build_shell_command(cwd: PathBuf) -> Result<CommandBuilder, String> {
-    let mut command = CommandBuilder::new(shell_command()?);
-    command.cwd(cwd);
-    // Interactive shells use TERM to select the cursor, erase, and redraw
-    // sequences that xterm.js must render. A GUI-launched Tauri process often
-    // has no inherited terminal environment, so make the PTY type explicit.
-    command.env("TERM", "xterm-256color");
-
-    Ok(command)
-}
-
 #[tauri::command]
 fn terminal_spawn<R: Runtime>(
     app: tauri::AppHandle<R>,
@@ -281,7 +270,7 @@ fn terminal_spawn_with_shell<R: Runtime>(
     home_override: Option<OsString>,
 ) -> Result<u32, String> {
     let cwd = safe_home_path(&cwd)?;
-    let command = build_shell_command(cwd)?;
+    let command = build_shell_command(shell, &cwd, cols, rows, home_override.as_deref());
     let pty = native_pty_system()
         .openpty(PtySize {
             rows: rows.max(2),
@@ -794,11 +783,7 @@ mod tests {
 
             let app = test_app();
             let handle = app.handle().clone();
-            let (output_tx, output_rx) = channel::<String>();
-            handle.listen("terminal://output", move |event| {
-                let data = field(event.payload(), "data");
-                let _ = output_tx.send(data.as_str().unwrap_or_default().to_string());
-            });
+            let mut output = listen_for_output(&handle);
 
             let home = isolated_home();
             let session_id = terminal_spawn_with_shell(
@@ -818,7 +803,8 @@ mod tests {
             )
             .expect("shell should accept input");
 
-            let transcript = read_until(&output_rx, "qedit-shell:");
+            output.wait_for("qedit-shell:");
+            let transcript = output.seen.clone();
             let shell_flags = transcript
                 .split("qedit-shell:")
                 .nth(1)
@@ -879,7 +865,8 @@ mod tests {
             "printf 'qedit-e%s:%s:%s:%s:%s:%s\\n' 'nv' \"$TERM\" \"$HOME\" \"$LANG\" \"$-\" \"$(command -v clear)\"\n".to_string(),
         )
         .expect("terminal should accept environment probe");
-        let environment = read_until(&output_rx, "qedit-env:");
+        output.wait_for("qedit-env:");
+        let environment = output.seen.clone();
         println!("--- terminal environment ---\n{environment}\n--- end environment ---");
         assert!(
             environment.contains("qedit-env:xterm-256color:"),
@@ -899,7 +886,8 @@ mod tests {
             "clear >/dev/null; printf 'qedit-c%s:ok\\n' 'lear'\n".to_string(),
         )
         .expect("terminal should accept clear probe");
-        let clear_output = read_until(&output_rx, "qedit-clear:ok");
+        output.wait_for("qedit-clear:ok");
+        let clear_output = output.seen.clone();
         assert!(
             clear_output.contains("qedit-clear:ok"),
             "clear should run successfully, got: {clear_output:?}"
@@ -931,14 +919,23 @@ mod tests {
 
     #[test]
     fn spawned_shell_command_declares_a_terminal_type() {
-        let command = build_shell_command(PathBuf::from(env!("CARGO_MANIFEST_DIR")))
-            .expect("shell command should build");
+        let shell = shell_command();
+        let command = build_shell_command(
+            shell.clone(),
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            80,
+            24,
+            None,
+        );
 
         assert_eq!(
             command.get_env("TERM"),
             Some(std::ffi::OsStr::new("xterm-256color")),
             "GUI-launched shells inherit no terminal type, so the PTY must declare one"
         );
+        assert_eq!(command.get_env("SHELL"), Some(shell.as_os_str()));
+        assert_eq!(command.get_env("COLUMNS"), Some(OsStr::new("80")));
+        assert_eq!(command.get_env("LINES"), Some(OsStr::new("24")));
     }
 
     #[test]
