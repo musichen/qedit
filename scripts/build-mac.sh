@@ -8,15 +8,23 @@ set -euo pipefail
 CI=true pnpm exec tauri build --bundles dmg
 
 APP_BUNDLE="src-tauri/target/release/bundle/macos/qedit.app"
-DMG_VERSION=$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")
-TAURI_ARCH=$(rustc -vV | sed -n 's/^host: //p' | sed 's/-apple-darwin$//')
-DMG_PATH="src-tauri/target/release/bundle/dmg/qedit_${DMG_VERSION}_${TAURI_ARCH}.dmg"
+DMG_DIR="src-tauri/target/release/bundle/dmg"
 
 if [[ ! -d "$APP_BUNDLE" || ! -x "$APP_BUNDLE/Contents/MacOS/qedit" ]]; then
   echo "macOS build: app bundle not found: $APP_BUNDLE" >&2
   exit 1
 fi
-if [[ ! -f "$DMG_PATH" ]]; then
-  echo "macOS build: DMG not produced: $DMG_PATH" >&2
+
+# Discover the artifact instead of predicting its name: tauri-bundler derives
+# the version from tauri.conf.json and labels the architecture itself (x64 on
+# Intel, aarch64 on Apple Silicon).
+declare -a DMGS=()
+while IFS= read -r -d '' dmg; do
+  DMGS+=("$dmg")
+done < <(find "$DMG_DIR" -maxdepth 1 -type f -name '*.dmg' -print0 2>/dev/null)
+if [[ ${#DMGS[@]} -eq 0 ]]; then
+  echo "macOS build: DMG not produced in $DMG_DIR" >&2
   exit 1
 fi
+
+printf 'macOS build: %s\n' "${DMGS[@]}"

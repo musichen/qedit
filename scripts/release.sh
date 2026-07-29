@@ -29,6 +29,19 @@ if [[ -z "$DRY_RUN" && -n "$(git status --porcelain --untracked-files=all)" ]]; 
   exit 1
 fi
 
+# Resolve the release CLI before anything is published: a missing CLI must not
+# be discovered after the tag has already been pushed to the remote. The CLI
+# must already be installed; fetching an unpinned package over the network at
+# publish time is not acceptable in the step that uploads artifacts.
+if command -v gh-axi >/dev/null 2>&1; then
+  RELEASE_CLI=(gh-axi)
+elif command -v gh >/dev/null 2>&1; then
+  RELEASE_CLI=(gh)
+else
+  echo "Error: neither gh-axi nor gh is installed; cannot create the release" >&2
+  exit 1
+fi
+
 echo ""
 echo "=== Running check pipeline ==="
 pnpm run verify
@@ -97,18 +110,7 @@ git push origin "v${VERSION}"
 echo ""
 echo "=== Creating GitHub release ==="
 # Arrays preserve artifact paths and release notes without eval or shell
-# interpolation surprises. The release CLI must already be installed: fetching
-# an unpinned package over the network at publish time is not acceptable in the
-# step that signs and uploads artifacts.
-if command -v gh-axi >/dev/null 2>&1; then
-  RELEASE_CLI=(gh-axi)
-elif command -v gh >/dev/null 2>&1; then
-  RELEASE_CLI=(gh)
-else
-  echo "Error: neither gh-axi nor gh is installed; cannot create the release" >&2
-  exit 1
-fi
-
+# interpolation surprises.
 "${RELEASE_CLI[@]}" release create "v${VERSION}" \
   --title "v${VERSION}" \
   --notes "$NOTES" \

@@ -125,6 +125,10 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   const [saveFailure, setSaveFailure] = useState<{
     path: string;
     message: string;
+    // A 'file' failure belongs to one buffer and is hidden with it. A Save As
+    // failure belongs to the operation, not to whichever tab happens to be
+    // focused when the native dialog resolves, so it stays visible.
+    scope: 'file' | 'operation';
   } | null>(null);
   const loadedRef = useRef<Set<string>>(new Set());
   // Keep a small, disk-backed history for Cmd/Ctrl+Shift+T. Dirty buffers are
@@ -330,6 +334,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
           status?.kind === 'error'
             ? `Refusing to save ${activeFilePath}: the file was never read successfully`
             : `Refusing to save ${activeFilePath}: still loading`,
+        scope: 'file',
       });
 
       return;
@@ -341,6 +346,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       setSaveFailure({
         path: activeFilePath,
         message: `Refusing to save ${activeFilePath}: no buffer is cached for this file`,
+        scope: 'file',
       });
 
       return;
@@ -353,7 +359,11 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       await writeNativeTextFile(activeFilePath, content);
       markModified(activeFilePath, false);
     } catch (error) {
-      setSaveFailure({ path: activeFilePath, message: errorMessage(error) });
+      setSaveFailure({
+        path: activeFilePath,
+        message: errorMessage(error),
+        scope: 'file',
+      });
     } finally {
       setSaving(false);
     }
@@ -369,6 +379,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       setSaveFailure({
         path: activeFilePath,
         message: `Refusing to save ${activeFilePath}: the file is not ready`,
+        scope: 'operation',
       });
 
       return;
@@ -380,7 +391,11 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     try {
       targetPath = await saveNativeFile(sourcePath);
     } catch (error) {
-      setSaveFailure({ path: activeFilePath, message: errorMessage(error) });
+      setSaveFailure({
+        path: sourcePath,
+        message: `Could not save ${sourcePath} as a new file: ${errorMessage(error)}`,
+        scope: 'operation',
+      });
 
       return;
     }
@@ -398,6 +413,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       setSaveFailure({
         path: sourcePath,
         message: `Could not save as ${targetPath}: ${sourcePath} was closed before the save completed`,
+        scope: 'operation',
       });
 
       return;
@@ -410,6 +426,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       setSaveFailure({
         path: sourcePath,
         message: `Could not save as ${targetPath}: that file is already open`,
+        scope: 'operation',
       });
 
       return;
@@ -466,14 +483,19 @@ export function EditorProvider({ children }: { children: ReactNode }) {
         setLanguage(languageFromPath(targetPath));
       }
     } catch (error) {
-      setSaveFailure({ path: sourcePath, message: errorMessage(error) });
+      setSaveFailure({
+        path: sourcePath,
+        message: `Could not save as ${targetPath}: ${errorMessage(error)}`,
+        scope: 'operation',
+      });
     } finally {
       setSaving(false);
     }
   }, [activeFilePath, fileContents, fileStatus]);
 
   const saveError =
-    saveFailure && saveFailure.path === activeFilePath
+    saveFailure &&
+    (saveFailure.scope === 'operation' || saveFailure.path === activeFilePath)
       ? saveFailure.message
       : null;
   const dirtyTabCount = openTabs.filter((tab) => tab.isModified).length;
