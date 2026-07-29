@@ -98,6 +98,8 @@ describe('release pipeline contract', () => {
     expect(workflow.match(/target: /g)).toHaveLength(6);
     expect(workflow).toContain('actions/attest-build-provenance@v2');
     expect(workflow).toContain('QEDIT_REQUIRE_SIGNING');
+    expect(workflow).toContain('Resolve macOS signing mode');
+    expect(workflow).toContain("steps.macos-signing.outputs.enabled == 'true'");
     expect(workflow).toContain('CI: true');
     expect(workflow).toContain('path: dist/release');
     expect(workflow).not.toContain('xdg-utils');
@@ -203,7 +205,7 @@ describe('release pipeline contract', () => {
     }
   });
 
-  it('records unsigned preview status when signing credentials are absent', () => {
+  it('records unsigned preview status when signing credentials are absent or incomplete', () => {
     const root = mkdtempSync(join(tmpdir(), 'qedit-signing-'));
     const manifestPath = join(root, 'manifest.json');
     try {
@@ -218,7 +220,7 @@ describe('release pipeline contract', () => {
             QEDIT_REQUIRE_SIGNING: '0',
             APPLE_CERTIFICATE: '',
             APPLE_CERTIFICATE_PASSWORD: '',
-            APPLE_SIGNING_IDENTITY: '',
+            APPLE_SIGNING_IDENTITY: 'Developer ID Application: stale identity',
             APPLE_ID: '',
             APPLE_PASSWORD: '',
             APPLE_TEAM_ID: '',
@@ -256,7 +258,7 @@ describe('release pipeline contract', () => {
             QEDIT_REQUIRE_SIGNING: '0',
             APPLE_CERTIFICATE: '',
             APPLE_CERTIFICATE_PASSWORD: '',
-            APPLE_SIGNING_IDENTITY: '',
+            APPLE_SIGNING_IDENTITY: 'Developer ID Application: stale identity',
             APPLE_ID: '',
             APPLE_PASSWORD: '',
             APPLE_TEAM_ID: '',
@@ -273,6 +275,7 @@ describe('release pipeline contract', () => {
         status: status.status,
         reason: status.reason,
       });
+      expect(status.reason).toContain('absent or incomplete');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

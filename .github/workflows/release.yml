@@ -73,6 +73,24 @@ jobs:
           version='${{ inputs.version }}'
           if [[ -z "$version" ]]; then version="${GITHUB_REF_NAME#v}"; fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Resolve macOS signing mode
+        id: macos-signing
+        if: startsWith(matrix.target, 'macos-')
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$APPLE_CERTIFICATE" && -n "$APPLE_CERTIFICATE_PASSWORD" && -n "$APPLE_SIGNING_IDENTITY" && -n "$APPLE_ID" && -n "$APPLE_PASSWORD" && -n "$APPLE_TEAM_ID" ]]; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+          fi
       - name: Prepare macOS signing identity before DMG creation
         if: startsWith(matrix.target, 'macos-')
         shell: bash
@@ -87,7 +105,10 @@ jobs:
         run: bash scripts/release-sign-prepare.sh ${{ matrix.target }}
       - name: Build native bundle
         env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # Tauri codesigns during bundling when this is set. Only expose the
+          # identity after the complete credential set has been confirmed;
+          # otherwise the public preview must remain genuinely unsigned.
+          APPLE_SIGNING_IDENTITY: ${{ steps.macos-signing.outputs.enabled == 'true' && secrets.APPLE_SIGNING_IDENTITY || '' }}
         run: pnpm run release:build -- ${{ matrix.target }} ${{ steps.version.outputs.version }}
       - name: Sign and notarize release bundle
         if: startsWith(matrix.target, 'macos-') || startsWith(matrix.target, 'windows-')
