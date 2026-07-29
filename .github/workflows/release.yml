@@ -197,14 +197,14 @@ jobs:
             echo
             echo '### Per-target status'
             node - "$root" <<'NODE'
-            const fs = require('node:fs');
-            const path = require('node:path');
-            const root = process.argv[2];
-            for (const target of ['macos-arm64', 'macos-x64', 'windows-arm64', 'windows-x64', 'linux-arm64', 'linux-x64']) {
-              const manifest = JSON.parse(fs.readFileSync(path.join(root, target, 'manifest.json'), 'utf8'));
-              console.log(`- ${target}: ${manifest.signing.status} — ${manifest.signing.reason}`);
-            }
-          NODE
+const fs = require('node:fs');
+const path = require('node:path');
+const root = process.argv[2];
+for (const target of ['macos-arm64', 'macos-x64', 'windows-arm64', 'windows-x64', 'linux-arm64', 'linux-x64']) {
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, target, 'manifest.json'), 'utf8'));
+  console.log(`- ${target}: ${manifest.signing.status} — ${manifest.signing.reason}`);
+}
+NODE
           } > "$root/RELEASE_NOTES.md"
       - name: Prepare uniquely named release metadata
         shell: bash
@@ -230,13 +230,15 @@ jobs:
           assets=("$root/SHA256SUMS" "$root/provenance.json")
           while IFS= read -r -d '' file; do assets+=("$file"); done < <(find "$root" -type f \( -name 'qedit-v*.app.zip' -o -name 'qedit-v*.dmg' -o -name 'qedit-v*.msi' -o -name 'qedit-v*.exe' -o -name 'qedit-v*.deb' -o -name 'qedit-v*.AppImage' -o -name 'qedit-v*-manifest.json' -o -name 'qedit-v*-signing.json' \) -print0 | sort -z)
           tag="v$version"
+          repo="${GITHUB_REPOSITORY}"
           if npx -y gh-axi release view "$tag" >/dev/null 2>&1; then
             npx -y gh-axi release edit "$tag" --title "$tag" --notes-file "$root/RELEASE_NOTES.md"
+            existing_assets_json=$(npx -y gh-axi api "repos/$repo/releases/tags/$tag" --jq '.assets' 2>/dev/null || echo '[]')
             for file in "${assets[@]}"; do
               name="$(basename "$file")"
-              asset_id=$(npx -y gh-axi api "repos/musichen/qedit/releases/tags/$tag" --jq ".assets[] | select(.name == \"$name\") | .id" 2>/dev/null || true)
+              asset_id=$(echo "$existing_assets_json" | node -e "const a=JSON.parse(require('fs').readFileSync(0,'utf8'));const m=a.find(x=>x.name===process.argv[1]);if(m)console.log(m.id);" "$name")
               if [[ -n "$asset_id" ]]; then
-                npx -y gh-axi api DELETE "repos/musichen/qedit/releases/assets/$asset_id" >/dev/null
+                npx -y gh-axi api DELETE "repos/$repo/releases/assets/$asset_id" >/dev/null
               fi
             done
             npx -y gh-axi release upload "$tag" "${assets[@]}"
