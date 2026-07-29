@@ -189,15 +189,32 @@ jobs:
             dist/release/v${{ steps.version.outputs.version }}/**/*-nsis.exe
             dist/release/v${{ steps.version.outputs.version }}/**/*.deb
             dist/release/v${{ steps.version.outputs.version }}/**/*.AppImage
-      - name: Create release branch and tag for manual dispatches
+      - name: Ensure release branch and tag
         shell: bash
         run: |
           set -euo pipefail
           version='${{ steps.version.outputs.version }}'
-          if ! git ls-remote --exit-code --refs origin "refs/tags/v$version" >/dev/null 2>&1; then
-            git push origin "HEAD:refs/heads/release/v$version"
-            git tag -a "v$version" -m "Release v$version"
-            git push origin "v$version"
+          branch="release/v$version"
+          tag="v$version"
+
+          # Keep the annotated tag identity deterministic and scoped to this
+          # checkout; never change the runner's global git configuration.
+          git config --local user.name 'qedit release automation'
+          git config --local user.email 'qedit-release@localhost'
+
+          if git ls-remote --exit-code --refs origin "refs/heads/$branch" >/dev/null 2>&1; then
+            echo "release branch $branch already exists"
+          else
+            git push origin "HEAD:refs/heads/$branch"
+          fi
+
+          if git ls-remote --exit-code --refs origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "tag $tag already exists"
+          else
+            if ! git show-ref --verify --quiet "refs/tags/$tag"; then
+              git tag -a "$tag" -m "Release $tag"
+            fi
+            git push origin "refs/tags/$tag"
           fi
       - name: Generate release notes
         shell: bash

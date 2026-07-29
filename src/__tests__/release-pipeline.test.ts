@@ -146,6 +146,29 @@ describe('release pipeline contract', () => {
     );
   });
 
+  it('uses a local automation identity and rerun-safe release refs', () => {
+    const workflow = readFileSync(
+      join(projectRoot, '.github/workflows/release.yml'),
+      'utf8',
+    );
+    const tagStep =
+      workflow.match(
+        /      - name: Ensure release branch and tag[\s\S]*?(?=\n      - name: Generate release notes)/,
+      )?.[0] ?? '';
+
+    expect(tagStep).toContain(
+      "git config --local user.name 'qedit release automation'",
+    );
+    expect(tagStep).toContain(
+      "git config --local user.email 'qedit-release@localhost'",
+    );
+    expect(tagStep).not.toContain('git config --global');
+    expect(tagStep).toContain('refs/heads/$branch');
+    expect(tagStep).toContain('refs/tags/$tag');
+    expect(tagStep).toContain('git show-ref --verify --quiet');
+    expect(tagStep).toContain('git tag -a "$tag" -m "Release $tag"');
+  });
+
   it('bundles a portable xdg-open fallback for AppImage builds', () => {
     const config = JSON.parse(
       readFileSync(join(projectRoot, 'src-tauri/tauri.conf.json'), 'utf8'),
