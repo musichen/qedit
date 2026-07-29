@@ -218,7 +218,10 @@ export async function renameNativeFile(
   try {
     const { exists, rename } = await import('@tauri-apps/plugin-fs');
 
-    if (normalizePath(oldPath) !== normalizePath(newPath) && (await exists(newPath))) {
+    if (
+      normalizePath(oldPath) !== normalizePath(newPath) &&
+      (await exists(newPath))
+    ) {
       throw new WorkspaceBridgeError(
         `A file named ${basenameFromPath(newPath)} already exists.`,
       );

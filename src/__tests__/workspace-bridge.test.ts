@@ -90,4 +90,21 @@ describe('native workspace file operations', () => {
       'only open files and folders',
     );
   });
+
+  it('rejects renaming onto an existing destination file', async () => {
+    exists.mockResolvedValueOnce(true);
+    await expect(
+      renameNativeFile('/home/project/a.md', '/home/project/b.md'),
+    ).rejects.toThrow('already exists');
+    expect(rename).not.toHaveBeenCalled();
+  });
+
+  it('allows renaming a path onto itself without checking for a conflict', async () => {
+    await renameNativeFile('/home/project/a.md', '/home/project/a.md');
+    expect(exists).not.toHaveBeenCalled();
+    expect(rename).toHaveBeenCalledWith(
+      '/home/project/a.md',
+      '/home/project/a.md',
+    );
+  });
 });

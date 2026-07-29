@@ -17,7 +17,7 @@ Monaco as the editing surface.
 - The Explorer toolbar creates a new empty file in the open workspace, refreshes
   after file mutations, and exposes filename/path search. New files stay inside
   the workspace and `$HOME`; cancellation and invalid destinations leave the
-  workspace unchanged.
+  workspace unchanged. Renaming refuses a destination that already exists.
 - Open files stack in the tab bar; a dot marks unsaved edits. Closing a modified
   tab asks for confirmation and discards those edits, and opening another folder
   or quitting the app asks the same way. Closing a clean tab drops its buffer, so
