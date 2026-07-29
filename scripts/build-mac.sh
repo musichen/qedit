@@ -5,7 +5,12 @@ set -euo pipefail
 # requires an interactive GUI session and is unavailable in CI/headless hosts.
 # tauri-bundler skips that step when CI is set, so the dmg target stays
 # reproducible and valid on both developer machines and headless runners.
-CI=true pnpm exec tauri build --bundles dmg
+#
+# The app target is requested explicitly: when only dmg is asked for, the
+# bundler treats qedit.app as a throwaway intermediate and deletes it in its
+# "Cleaning" step, so the .app assertion below (and smoke:native) would have
+# nothing left to inspect.
+CI=true pnpm exec tauri build --bundles app,dmg
 
 APP_BUNDLE="src-tauri/target/release/bundle/macos/qedit.app"
 DMG_DIR="src-tauri/target/release/bundle/dmg"
