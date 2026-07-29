@@ -43,6 +43,10 @@ interface EditorContextValue {
   language: string;
   saving: boolean;
   saveError: string | null;
+  // 'file' errors describe the active buffer, so only those may drive the
+  // status chip. 'operation' errors describe a Save As that may have resolved
+  // against another tab and are shown as a message only.
+  saveErrorScope: 'file' | 'operation' | null;
   hasDirtyTabs: boolean;
   dirtyTabCount: number;
   openFile: (path: string, name: string, language?: string) => void;
@@ -379,7 +383,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       setSaveFailure({
         path: activeFilePath,
         message: `Refusing to save ${activeFilePath}: the file is not ready`,
-        scope: 'operation',
+        scope: 'file',
       });
 
       return;
@@ -493,11 +497,13 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     }
   }, [activeFilePath, fileContents, fileStatus]);
 
-  const saveError =
+  const visibleFailure =
     saveFailure &&
     (saveFailure.scope === 'operation' || saveFailure.path === activeFilePath)
-      ? saveFailure.message
+      ? saveFailure
       : null;
+  const saveError = visibleFailure?.message ?? null;
+  const saveErrorScope = visibleFailure?.scope ?? null;
   const dirtyTabCount = openTabs.filter((tab) => tab.isModified).length;
   const hasDirtyTabs = dirtyTabCount > 0;
 
@@ -512,6 +518,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       language,
       saving,
       saveError,
+      saveErrorScope,
       hasDirtyTabs,
       dirtyTabCount,
       openFile,
@@ -537,6 +544,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       language,
       saving,
       saveError,
+      saveErrorScope,
       hasDirtyTabs,
       dirtyTabCount,
       openFile,
