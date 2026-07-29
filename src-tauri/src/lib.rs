@@ -116,7 +116,7 @@ fn account_shell() -> Option<OsString> {
     let mut buffer_len: usize = 1024;
 
     loop {
-        let mut buffer = vec![0i8; buffer_len];
+        let mut buffer = vec![0 as libc::c_char; buffer_len];
         let status = unsafe {
             libc::getpwuid_r(
                 libc::getuid(),
