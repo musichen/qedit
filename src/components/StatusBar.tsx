@@ -117,7 +117,7 @@ export function StatusBar() {
       </div>
       <div className="flex min-w-0 shrink-0 items-center gap-2">
         <span className="shrink-0 text-text-dimmed">
-          git:{gitBranch ?? '—'}
+          git:{gitBranch ?? '-'}
         </span>
         <span
           className="max-w-[30%] truncate text-xs text-text-dimmed"

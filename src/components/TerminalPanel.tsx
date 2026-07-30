@@ -10,7 +10,8 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { useSettingsOrDefault } from './SettingsContext';
 import { useWorkspace } from './WorkspaceContext';
 
-import { designToken } from '#/lib/design-tokens';
+import { withThemeTokens } from '#/lib/design-tokens';
+import type { TokenTheme } from '#/lib/design-tokens';
 import {
   closeTerminal,
   listenTerminalExit,
@@ -32,28 +33,71 @@ type TerminalEvent =
   | { kind: 'output'; data: string }
   | { kind: 'exit'; code: number | null };
 
-function terminalTheme() {
-  const token = (name: string, fallback: string) => designToken(name, fallback);
+const TERMINAL_FALLBACKS: Record<TokenTheme, Record<string, string>> = {
+  dark: {
+    '--qedit-bg-editor': '#303040',
+    '--qedit-text-primary': '#d4d4d4',
+    '--qedit-text-accent': '#70a0ff',
+    '--qedit-bg-selection': '#2050c0',
+    '--qedit-bg-dropdown': '#101010',
+    '--qedit-danger': '#f07178',
+    '--qedit-success': '#98c379',
+    '--qedit-warning': '#e5c07b',
+    '--qedit-syntax-keyword': '#569cd6',
+    '--qedit-syntax-function': '#dcdcaa',
+    '--qedit-syntax-type': '#4ec9b0',
+    '--qedit-text-muted': '#808080',
+    '--qedit-accent-text': '#ffffff',
+  },
+  light: {
+    '--qedit-bg-editor': '#ffffff',
+    '--qedit-text-primary': '#1f1f28',
+    '--qedit-text-accent': '#1a56c4',
+    '--qedit-bg-selection': '#add6ff',
+    '--qedit-bg-dropdown': '#ffffff',
+    '--qedit-danger': '#c7262f',
+    '--qedit-success': '#237d31',
+    '--qedit-warning': '#8a6100',
+    '--qedit-syntax-keyword': '#0000ff',
+    '--qedit-syntax-function': '#795e26',
+    '--qedit-syntax-type': '#267f99',
+    '--qedit-text-muted': '#6b6b80',
+    '--qedit-accent-text': '#ffffff',
+  },
+};
 
-  return {
-    background: token('--color-bg-editor', '#303040'),
-    foreground: token('--color-text-primary', '#d4d4d4'),
-    cursor: token('--color-text-accent', '#70a0ff'),
-    selectionBackground: token('--color-bg-selection', '#2050c0'),
-    black: token('--color-bg-dropdown', '#101010'),
-    red: token('--color-danger', '#f07178'),
-    green: token('--color-success', '#98c379'),
-    yellow: token('--color-warning', '#e5c07b'),
-    blue: token('--color-syntax-keyword', '#569cd6'),
-    magenta: token('--color-syntax-function', '#dcdcaa'),
-    cyan: token('--color-syntax-type', '#4ec9b0'),
-    white: token('--color-text-primary', '#d4d4d4'),
-    brightBlack: token('--color-text-muted', '#808080'),
-    brightWhite: token('--color-accent-text', '#ffffff'),
-  };
+function terminalTheme(theme: TokenTheme) {
+  const fallbacks = TERMINAL_FALLBACKS[theme];
+
+  return withThemeTokens(theme, (read) => {
+    const token = (name: string) => read(name, fallbacks[name] ?? '#000000');
+
+    return {
+      background: token('--qedit-bg-editor'),
+      foreground: token('--qedit-text-primary'),
+      cursor: token('--qedit-text-accent'),
+      selectionBackground: token('--qedit-bg-selection'),
+      black: token('--qedit-bg-dropdown'),
+      red: token('--qedit-danger'),
+      green: token('--qedit-success'),
+      yellow: token('--qedit-warning'),
+      blue: token('--qedit-syntax-keyword'),
+      magenta: token('--qedit-syntax-function'),
+      cyan: token('--qedit-syntax-type'),
+      white: token('--qedit-text-primary'),
+      brightBlack: token('--qedit-text-muted'),
+      brightWhite: token('--qedit-accent-text'),
+    };
+  });
 }
 
-export function TerminalPanel() {
+/**
+ * The panel stays mounted while hidden. Unmounting it would tear down every
+ * PTY session along with its tabs, names, and scrollback, so visibility is a
+ * presentation concern only - hiding just collapses the panel and parks every
+ * terminal as inactive so it is refit and refocused on the way back.
+ */
+export function TerminalPanel({ visible = true }: { visible?: boolean }) {
   const { workspaceRoot } = useWorkspace();
   const [state, dispatch] = useReducer(
     terminalTabsReducer,
@@ -207,8 +251,11 @@ export function TerminalPanel() {
 
   return (
     <section
-      className="flex h-52 min-h-0 flex-col border-t border-border-default bg-editor"
+      className={`h-52 min-h-0 flex-col border-t border-border-default bg-editor ${
+        visible ? 'flex' : 'hidden'
+      }`}
       aria-label="Terminal panel"
+      aria-hidden={!visible}
     >
       <div className="flex h-tab shrink-0 items-stretch border-b border-border-subtle text-xs font-medium text-text-secondary">
         <div className="flex shrink-0 items-center gap-2 border-r border-border-subtle px-3">
@@ -300,7 +347,7 @@ export function TerminalPanel() {
           <TerminalInstance
             key={tab.id}
             id={tab.id}
-            isActive={tab.id === state.activeId}
+            isActive={visible && tab.id === state.activeId}
             workspaceRoot={workspaceRoot}
             onStatus={setStatus}
             onOutput={markActivity}
@@ -499,7 +546,7 @@ function TerminalInstance({
   onStatus: (id: string, status: TerminalStatus, error?: string | null) => void;
   onOutput: (id: string) => void;
 }) {
-  const { settings } = useSettingsOrDefault();
+  const { settings, resolvedTheme } = useSettingsOrDefault();
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<import('@xterm/xterm').Terminal | null>(null);
   const fitRef = useRef<import('@xterm/addon-fit').FitAddon | null>(null);
@@ -507,8 +554,10 @@ function TerminalInstance({
   const initialWorkspaceRootRef = useRef(workspaceRoot);
   const activeRef = useRef(isActive);
   const settingsRef = useRef(settings);
+  const resolvedThemeRef = useRef(resolvedTheme);
   activeRef.current = isActive;
   settingsRef.current = settings;
+  resolvedThemeRef.current = resolvedTheme;
 
   useEffect(() => {
     let disposed = false;
@@ -539,7 +588,7 @@ function TerminalInstance({
           cursorBlink: true,
           fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
           fontSize: settingsRef.current.terminalFontSize,
-          theme: terminalTheme(),
+          theme: terminalTheme(resolvedThemeRef.current),
         });
         const fit = new FitAddon();
         terminal.loadAddon(fit);
@@ -705,9 +754,9 @@ function TerminalInstance({
     if (!terminal) return;
 
     terminal.options.fontSize = settings.terminalFontSize;
-    terminal.options.theme = terminalTheme();
+    terminal.options.theme = terminalTheme(resolvedTheme);
     if (activeRef.current) fitRef.current?.fit();
-  }, [settings.terminalFontSize]);
+  }, [resolvedTheme, settings.terminalFontSize]);
 
   useEffect(() => {
     const focusTerminal = () => {

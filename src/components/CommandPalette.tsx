@@ -89,7 +89,8 @@ export function CommandPalette({
             aria-label="Search commands"
           />
           <kbd className="flex items-center gap-1 border border-border-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
-            <Command className="h-2.5 w-2.5" />K
+            ⇧
+            <Command className="h-2.5 w-2.5" />P
           </kbd>
         </div>
         <div className="max-h-[min(60vh,420px)] overflow-auto p-1">

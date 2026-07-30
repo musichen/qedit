@@ -12,6 +12,7 @@ import { StatusBar } from '#/components/StatusBar';
 import { TabBar } from '#/components/TabBar';
 import { TerminalPanel } from '#/components/TerminalPanel';
 import { useWorkspace, WorkspaceProvider } from '#/components/WorkspaceContext';
+import { isMenuActionAvailable } from '#/lib/menu-actions';
 import { shortcutActionForEvent } from '#/lib/shortcuts';
 
 export const Route = createFileRoute('/')({
@@ -66,6 +67,7 @@ function EditorLayout() {
       event.stopPropagation();
 
       if (/^terminal-[1-9]$/.test(action)) {
+        setTerminalVisible(true);
         window.dispatchEvent(
           new CustomEvent('qedit:terminal-tab', {
             detail: Number(action.slice('terminal-'.length)) - 1,
@@ -124,12 +126,17 @@ function EditorLayout() {
           window.dispatchEvent(new Event('qedit:terminal-close'));
           break;
         case 'next-terminal':
+          setTerminalVisible(true);
           window.dispatchEvent(new Event('qedit:terminal-next'));
           break;
         case 'previous-terminal':
+          setTerminalVisible(true);
           window.dispatchEvent(new Event('qedit:terminal-previous'));
           break;
         case 'focus-terminal':
+          // Revealing the panel makes its active terminal focus itself, so the
+          // chord works the same whether or not the panel was already open.
+          setTerminalVisible(true);
           window.dispatchEvent(new Event('qedit:focus-terminal'));
           break;
         case 'focus-editor':
@@ -227,7 +234,6 @@ function EditorLayout() {
           setMode('system');
           break;
         case 'edit.find':
-        case 'edit.replace':
           window.dispatchEvent(new Event('qedit:find'));
           break;
         case 'terminal.new':
@@ -248,9 +254,15 @@ function EditorLayout() {
           window.dispatchEvent(new Event('qedit:terminal-close'));
           break;
         default:
-          window.dispatchEvent(
-            new CustomEvent('qedit:editor-command', { detail: action }),
-          );
+          // Only actions the registry knows about reach the menu enabled, so
+          // anything else here is a wiring bug rather than a user-facing no-op.
+          if (isMenuActionAvailable(action)) {
+            window.dispatchEvent(
+              new CustomEvent('qedit:editor-command', { detail: action }),
+            );
+          } else {
+            console.warn(`Unhandled menu action: ${action}`);
+          }
           break;
       }
     },
@@ -363,7 +375,7 @@ function EditorLayout() {
           <div className="min-h-0 overflow-hidden">
             <Editor />
           </div>
-          {terminalVisible && <TerminalPanel />}
+          <TerminalPanel visible={terminalVisible} />
         </main>
       </div>
       {statusBarVisible && <StatusBar />}

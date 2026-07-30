@@ -1,3 +1,5 @@
+import { isMenuActionAvailable } from './menu-actions';
+
 export interface MenuItem {
   label: string;
   action?: string;
@@ -135,11 +137,7 @@ export const MENU_DATA: MenuDefinition[] = [
     items: [
       { label: 'Toggle Sidebar', action: 'view.toggleSidebar', shortcut: '⌘B' },
       { label: 'Toggle Status Bar', action: 'view.toggleStatusBar' },
-      {
-        label: 'Toggle Terminal',
-        action: 'view.toggleTerminal',
-        shortcut: '⌃`',
-      },
+      { label: 'Toggle Terminal', action: 'view.toggleTerminal' },
       separator(),
       {
         label: 'Command Palette…',
@@ -212,7 +210,7 @@ export const MENU_DATA: MenuDefinition[] = [
   {
     label: 'Terminal',
     items: [
-      { label: 'New Terminal', action: 'terminal.new', shortcut: '⌃⇧`' },
+      { label: 'New Terminal', action: 'terminal.new' },
       { label: 'Split Terminal', action: 'terminal.split' },
       { label: 'Run Selected Text', action: 'terminal.runSelection' },
       separator(),
@@ -264,12 +262,25 @@ export function flattenMenuItems(items: MenuItem[]): MenuItem[] {
   });
 }
 
+/**
+ * A menu row is enabled only when the shell or the editor actually handles its
+ * action, so the menu shows the full command surface while the parts qedit has
+ * not implemented yet stay visibly unavailable instead of failing silently.
+ */
+export function isMenuItemEnabled(item: MenuItem): boolean {
+  if (item.disabled) return false;
+  if (item.submenu) return true;
+
+  return item.action !== undefined && isMenuActionAvailable(item.action);
+}
+
 export function menuCommands(): MenuItem[] {
   const commands = MENU_DATA.flatMap((menu) => flattenMenuItems(menu.items));
   const seen = new Set<string>();
 
   return commands.filter((item) => {
     if (!item.action || seen.has(item.action)) return false;
+    if (!isMenuItemEnabled(item)) return false;
     seen.add(item.action);
 
     return true;

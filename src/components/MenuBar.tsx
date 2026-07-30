@@ -1,7 +1,7 @@
 import { ChevronRight } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-import { MENU_DATA } from '#/lib/menu-data';
+import { MENU_DATA, isMenuItemEnabled } from '#/lib/menu-data';
 import type { MenuDefinition, MenuItem } from '#/lib/menu-data';
 
 export function MenuBar({ onAction }: { onAction: (action: string) => void }) {
@@ -139,7 +139,7 @@ function MenuRow({
       <button
         type="button"
         className="flex h-7 w-full items-center gap-3 rounded-sm px-2 text-left outline-none hover:bg-accent hover:text-accent-text focus-visible:bg-accent disabled:pointer-events-none disabled:opacity-40"
-        disabled={item.disabled}
+        disabled={!isMenuItemEnabled(item)}
         onClick={() => {
           if (item.submenu) return;
           if (item.action) onAction(item.action);

@@ -1,47 +1,139 @@
-/* qedit design system tokens. Keep component colors pointed at this layer. */
-@theme {
+/* qedit design system tokens. Keep component colors pointed at this layer.
+ *
+ * The palettes below are plain custom properties keyed on `data-theme`, which
+ * the root document script sets before first paint. `@theme` then maps every
+ * Tailwind token onto them, so a token resolves per element rather than once
+ * on `:root` - that is what lets Monaco and xterm snapshot either palette from
+ * a detached probe (see `src/lib/design-tokens.ts`). */
+:root,
+[data-theme='dark'] {
   /* Surfaces */
-  --color-bg-editor: #303040;
-  --color-bg-sidebar: #202020;
-  --color-bg-menubar: #202020;
-  --color-bg-dropdown: #101010;
-  --color-bg-statusbar: #505060;
-  --color-bg-input: #303040;
-  --color-bg-tab: #303040;
-  --color-bg-tab-active: #404050;
-  --color-bg-hover: #303030;
-  --color-bg-selection: #2050c0;
-  --color-bg-command-palette: #202030;
-  --color-bg-overlay: rgb(0 0 0 / 50%);
+  --qedit-bg-editor: #303040;
+  --qedit-bg-sidebar: #202020;
+  --qedit-bg-menubar: #202020;
+  --qedit-bg-dropdown: #101010;
+  --qedit-bg-statusbar: #505060;
+  --qedit-bg-input: #303040;
+  --qedit-bg-tab: #303040;
+  --qedit-bg-tab-active: #404050;
+  --qedit-bg-hover: #303030;
+  --qedit-bg-selection: #2050c0;
+  --qedit-bg-command-palette: #202030;
+  --qedit-bg-overlay: rgb(0 0 0 / 50%);
 
   /* Text */
-  --color-text-primary: #d4d4d4;
-  --color-text-secondary: #b0b0b0;
-  --color-text-muted: #808080;
-  --color-text-dimmed: #606060;
-  --color-text-accent: #70a0ff;
+  --qedit-text-primary: #d4d4d4;
+  --qedit-text-secondary: #b0b0b0;
+  --qedit-text-muted: #808080;
+  --qedit-text-dimmed: #606060;
+  --qedit-text-accent: #70a0ff;
 
   /* Borders */
-  --color-border-default: #3c3c4c;
-  --color-border-subtle: #2a2a3a;
-  --color-border-focus: #2050c0;
+  --qedit-border-default: #3c3c4c;
+  --qedit-border-subtle: #2a2a3a;
+  --qedit-border-focus: #2050c0;
 
   /* Syntax */
-  --color-syntax-comment: #6a9955;
-  --color-syntax-keyword: #569cd6;
-  --color-syntax-string: #ce9178;
-  --color-syntax-number: #b5cea8;
-  --color-syntax-function: #dcdcaa;
-  --color-syntax-variable: #9cdcfe;
-  --color-syntax-type: #4ec9b0;
+  --qedit-syntax-comment: #6a9955;
+  --qedit-syntax-keyword: #569cd6;
+  --qedit-syntax-string: #ce9178;
+  --qedit-syntax-number: #b5cea8;
+  --qedit-syntax-function: #dcdcaa;
+  --qedit-syntax-variable: #9cdcfe;
+  --qedit-syntax-type: #4ec9b0;
 
   /* Actions and state */
-  --color-accent: #2050c0;
-  --color-accent-hover: #3060d0;
-  --color-accent-text: #ffffff;
-  --color-danger: #f07178;
-  --color-warning: #e5c07b;
-  --color-success: #98c379;
+  --qedit-accent: #2050c0;
+  --qedit-accent-hover: #3060d0;
+  --qedit-accent-text: #ffffff;
+  --qedit-danger: #f07178;
+  --qedit-warning: #e5c07b;
+  --qedit-success: #98c379;
+}
+
+[data-theme='light'] {
+  /* Surfaces */
+  --qedit-bg-editor: #ffffff;
+  --qedit-bg-sidebar: #f3f3f5;
+  --qedit-bg-menubar: #f3f3f5;
+  --qedit-bg-dropdown: #ffffff;
+  --qedit-bg-statusbar: #d6dae6;
+  --qedit-bg-input: #ffffff;
+  --qedit-bg-tab: #ececf0;
+  --qedit-bg-tab-active: #ffffff;
+  --qedit-bg-hover: #e3e3e9;
+  --qedit-bg-selection: #add6ff;
+  --qedit-bg-command-palette: #f7f7fa;
+  --qedit-bg-overlay: rgb(0 0 0 / 25%);
+
+  /* Text */
+  --qedit-text-primary: #1f1f28;
+  --qedit-text-secondary: #45455a;
+  --qedit-text-muted: #6b6b80;
+  --qedit-text-dimmed: #9494a6;
+  --qedit-text-accent: #1a56c4;
+
+  /* Borders */
+  --qedit-border-default: #c6c6d2;
+  --qedit-border-subtle: #e1e1ea;
+  --qedit-border-focus: #2050c0;
+
+  /* Syntax */
+  --qedit-syntax-comment: #008000;
+  --qedit-syntax-keyword: #0000ff;
+  --qedit-syntax-string: #a31515;
+  --qedit-syntax-number: #098658;
+  --qedit-syntax-function: #795e26;
+  --qedit-syntax-variable: #001080;
+  --qedit-syntax-type: #267f99;
+
+  /* Actions and state */
+  --qedit-accent: #2050c0;
+  --qedit-accent-hover: #1a45a8;
+  --qedit-accent-text: #ffffff;
+  --qedit-danger: #c7262f;
+  --qedit-warning: #8a6100;
+  --qedit-success: #237d31;
+}
+
+@theme {
+  --color-bg-editor: var(--qedit-bg-editor);
+  --color-bg-sidebar: var(--qedit-bg-sidebar);
+  --color-bg-menubar: var(--qedit-bg-menubar);
+  --color-bg-dropdown: var(--qedit-bg-dropdown);
+  --color-bg-statusbar: var(--qedit-bg-statusbar);
+  --color-bg-input: var(--qedit-bg-input);
+  --color-bg-tab: var(--qedit-bg-tab);
+  --color-bg-tab-active: var(--qedit-bg-tab-active);
+  --color-bg-hover: var(--qedit-bg-hover);
+  --color-bg-selection: var(--qedit-bg-selection);
+  --color-bg-command-palette: var(--qedit-bg-command-palette);
+  --color-bg-overlay: var(--qedit-bg-overlay);
+
+  --color-text-primary: var(--qedit-text-primary);
+  --color-text-secondary: var(--qedit-text-secondary);
+  --color-text-muted: var(--qedit-text-muted);
+  --color-text-dimmed: var(--qedit-text-dimmed);
+  --color-text-accent: var(--qedit-text-accent);
+
+  --color-border-default: var(--qedit-border-default);
+  --color-border-subtle: var(--qedit-border-subtle);
+  --color-border-focus: var(--qedit-border-focus);
+
+  --color-syntax-comment: var(--qedit-syntax-comment);
+  --color-syntax-keyword: var(--qedit-syntax-keyword);
+  --color-syntax-string: var(--qedit-syntax-string);
+  --color-syntax-number: var(--qedit-syntax-number);
+  --color-syntax-function: var(--qedit-syntax-function);
+  --color-syntax-variable: var(--qedit-syntax-variable);
+  --color-syntax-type: var(--qedit-syntax-type);
+
+  --color-accent: var(--qedit-accent);
+  --color-accent-hover: var(--qedit-accent-hover);
+  --color-accent-text: var(--qedit-accent-text);
+  --color-danger: var(--qedit-danger);
+  --color-warning: var(--qedit-warning);
+  --color-success: var(--qedit-success);
 
   /* Typography and layout */
   --font-mono-qedit: 'SF Mono', 'Fira Code', Menlo, Monaco, Consolas, monospace;

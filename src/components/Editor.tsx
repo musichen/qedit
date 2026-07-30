@@ -8,6 +8,7 @@ import { EmptyState } from './EmptyState';
 import { useSettings } from './SettingsContext';
 
 import { MarkdownPreview } from '#/lib/markdown';
+import { EDITOR_MENU_COMMANDS } from '#/lib/menu-actions';
 import { MONACO_THEMES } from '#/lib/monaco-themes';
 
 export function Editor() {
@@ -44,27 +45,9 @@ export function Editor() {
   }, []);
 
   useEffect(() => {
-    const editorCommands: Record<string, string> = {
-      'edit.undo': 'undo',
-      'edit.redo': 'redo',
-      'edit.cut': 'editor.action.clipboardCutAction',
-      'edit.copy': 'editor.action.clipboardCopyAction',
-      'edit.paste': 'editor.action.clipboardPasteAction',
-      'edit.selectAll': 'editor.action.selectAll',
-      'edit.replace': 'editor.action.startFindReplaceAction',
-      'selection.cursorAbove': 'editor.action.insertCursorAbove',
-      'selection.cursorBelow': 'editor.action.insertCursorBelow',
-      'selection.addNext': 'editor.action.addSelectionToNextFindMatch',
-      'selection.selectAll': 'editor.action.selectHighlights',
-      'selection.expandSelection': 'editor.action.smartSelect.expand',
-      'selection.shrinkSelection': 'editor.action.smartSelect.shrink',
-      'go.symbol': 'editor.action.quickOutline',
-      'go.definition': 'editor.action.revealDefinition',
-      'go.line': 'editor.action.gotoLine',
-    };
     const handleCommand = (event: Event) => {
       const action = (event as CustomEvent<string>).detail;
-      const command = editorCommands[action];
+      const command = EDITOR_MENU_COMMANDS[action];
 
       if (command) editorRef.current?.trigger('menu', command, null);
     };
