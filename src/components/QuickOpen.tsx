@@ -102,7 +102,7 @@ export function QuickOpen({ onClose }: { onClose: () => void }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-[15vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/35 pt-[15vh]"
       onClick={onClose}
       role="dialog"
       aria-label="Search files"

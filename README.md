@@ -43,6 +43,10 @@ Monaco as the editing surface.
   session, double-click or **F2** renames a tab, drag-and-drop or
   **Cmd/Ctrl+Arrow Left/Right** reorders tabs, and switching tabs keeps every
   session's output and shell state alive in the background.
+- The gear icon in the status bar opens **Preferences**: a Dark, Light, or
+  Auto (OS-matched) theme, plus editor (font size, tab size, word wrap,
+  minimap, line numbers) and terminal (font size) settings. Changes save
+  automatically and persist across restarts.
 
 ### Shortcuts
 

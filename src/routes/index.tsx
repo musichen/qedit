@@ -5,6 +5,7 @@ import { Editor } from '#/components/Editor';
 import { EditorProvider, useEditor } from '#/components/EditorContext';
 import { FileTree } from '#/components/FileTree';
 import { QuickOpen } from '#/components/QuickOpen';
+import { SettingsProvider } from '#/components/SettingsContext';
 import { StatusBar } from '#/components/StatusBar';
 import { TabBar } from '#/components/TabBar';
 import { TerminalPanel } from '#/components/TerminalPanel';
@@ -17,11 +18,13 @@ export const Route = createFileRoute('/')({
 
 function Index() {
   return (
-    <EditorProvider>
-      <WorkspaceProvider>
-        <EditorLayout />
-      </WorkspaceProvider>
-    </EditorProvider>
+    <SettingsProvider>
+      <EditorProvider>
+        <WorkspaceProvider>
+          <EditorLayout />
+        </WorkspaceProvider>
+      </EditorProvider>
+    </SettingsProvider>
   );
 }
 

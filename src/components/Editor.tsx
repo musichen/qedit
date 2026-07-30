@@ -5,8 +5,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useEditor } from './EditorContext';
 import { EmptyState } from './EmptyState';
+import { useSettings } from './SettingsContext';
 
 import { MarkdownPreview } from '#/lib/markdown';
+import { MONACO_THEMES } from '#/lib/monaco-themes';
 
 export function Editor() {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
@@ -21,6 +23,7 @@ export function Editor() {
     markModified,
     updateFileContent,
   } = useEditor();
+  const { settings, resolvedTheme } = useSettings();
 
   useEffect(() => {
     setMarkdownPreview(language === 'markdown');
@@ -175,14 +178,14 @@ export function Editor() {
               language={language}
               onChange={handleChange}
               onMount={handleEditorMount}
-              theme="vs-dark"
+              theme={MONACO_THEMES[resolvedTheme]}
               options={{
-                fontSize: 14,
-                lineNumbers: 'on',
-                minimap: { enabled: false },
+                fontSize: settings.fontSize,
+                lineNumbers: settings.lineNumbers ? 'on' : 'off',
+                minimap: { enabled: settings.minimap },
                 scrollBeyondLastLine: false,
-                wordWrap: 'on',
-                tabSize: 2,
+                wordWrap: settings.wordWrap,
+                tabSize: settings.tabSize,
                 automaticLayout: true,
               }}
             />
@@ -200,14 +203,14 @@ export function Editor() {
       language={language}
       onChange={handleChange}
       onMount={handleEditorMount}
-      theme="vs-dark"
+      theme={MONACO_THEMES[resolvedTheme]}
       options={{
-        fontSize: 14,
-        lineNumbers: 'on',
-        minimap: { enabled: true },
+        fontSize: settings.fontSize,
+        lineNumbers: settings.lineNumbers ? 'on' : 'off',
+        minimap: { enabled: settings.minimap },
         scrollBeyondLastLine: false,
-        wordWrap: 'on',
-        tabSize: 2,
+        wordWrap: settings.wordWrap,
+        tabSize: settings.tabSize,
         automaticLayout: true,
       }}
     />

@@ -19,6 +19,7 @@ tauri = { version = "2", features = [] }
 tauri-plugin-fs = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-store = "2"
 portable-pty = "0.9"
 libc = "0.2"
 dirs = "6"
