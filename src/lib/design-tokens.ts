@@ -2,6 +2,18 @@ export type TokenTheme = 'light' | 'dark';
 
 export type TokenReader = (name: string, fallback: string) => string;
 
+/** Expand browser-normalized three-digit hex colors for canvas consumers. */
+export function designToken(value: string): string {
+  const match = /^#([\da-f]{3})$/i.exec(value);
+  const digits = match?.[1];
+  return digits
+    ? `#${digits
+        .split('')
+        .map((digit) => digit + digit)
+        .join('')}`
+    : value;
+}
+
 /**
  * Resolve tokens as they would compute under `theme`, regardless of the theme
  * currently applied to the document. Canvas-based surfaces (Monaco, xterm)
@@ -25,8 +37,8 @@ export function withThemeTokens<T>(
   try {
     const styles = getComputedStyle(probe);
 
-    return build(
-      (name, fallback) => styles.getPropertyValue(name).trim() || fallback,
+    return build((name, fallback) =>
+      designToken(styles.getPropertyValue(name).trim() || fallback),
     );
   } finally {
     probe.remove();
