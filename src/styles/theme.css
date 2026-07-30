@@ -18,6 +18,7 @@
   --qedit-bg-tab-active: #404050;
   --qedit-bg-hover: #303030;
   --qedit-bg-selection: #2050c0;
+  --qedit-bg-line-highlight: #404050;
   --qedit-bg-command-palette: #202030;
   --qedit-bg-overlay: rgb(0 0 0 / 50%);
 
@@ -49,6 +50,25 @@
   --qedit-danger: #f07178;
   --qedit-warning: #e5c07b;
   --qedit-success: #98c379;
+
+  /* Terminal ANSI ink. These are absolute ink colors rather than surfaces, so
+   * every entry must stay legible against --qedit-bg-editor in this palette. */
+  --qedit-ansi-black: #1a1a24;
+  --qedit-ansi-red: #f07178;
+  --qedit-ansi-green: #98c379;
+  --qedit-ansi-yellow: #e5c07b;
+  --qedit-ansi-blue: #569cd6;
+  --qedit-ansi-magenta: #c586c0;
+  --qedit-ansi-cyan: #4ec9b0;
+  --qedit-ansi-white: #d4d4d4;
+  --qedit-ansi-bright-black: #808080;
+  --qedit-ansi-bright-red: #ff8b92;
+  --qedit-ansi-bright-green: #b5e890;
+  --qedit-ansi-bright-yellow: #ffd894;
+  --qedit-ansi-bright-blue: #7cb8f0;
+  --qedit-ansi-bright-magenta: #dda0d8;
+  --qedit-ansi-bright-cyan: #6fe3c9;
+  --qedit-ansi-bright-white: #ffffff;
 }
 
 [data-theme='light'] {
@@ -63,6 +83,7 @@
   --qedit-bg-tab-active: #ffffff;
   --qedit-bg-hover: #e3e3e9;
   --qedit-bg-selection: #add6ff;
+  --qedit-bg-line-highlight: #f1f1f6;
   --qedit-bg-command-palette: #f7f7fa;
   --qedit-bg-overlay: rgb(0 0 0 / 25%);
 
@@ -94,6 +115,25 @@
   --qedit-danger: #c7262f;
   --qedit-warning: #8a6100;
   --qedit-success: #237d31;
+
+  /* Terminal ANSI ink. `white`/`brightWhite` stay mid-grey rather than tracking
+   * the surface, so shell output that asks for them is never white on white. */
+  --qedit-ansi-black: #24242e;
+  --qedit-ansi-red: #c7262f;
+  --qedit-ansi-green: #237d31;
+  --qedit-ansi-yellow: #8a6100;
+  --qedit-ansi-blue: #0f4ecc;
+  --qedit-ansi-magenta: #9b2fae;
+  --qedit-ansi-cyan: #0e6f78;
+  --qedit-ansi-white: #55555f;
+  --qedit-ansi-bright-black: #6b6b80;
+  --qedit-ansi-bright-red: #a81f27;
+  --qedit-ansi-bright-green: #1a6626;
+  --qedit-ansi-bright-yellow: #6d4d00;
+  --qedit-ansi-bright-blue: #0a3ea8;
+  --qedit-ansi-bright-magenta: #7d2490;
+  --qedit-ansi-bright-cyan: #0a5a62;
+  --qedit-ansi-bright-white: #8a8a99;
 }
 
 @theme {
