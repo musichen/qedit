@@ -499,7 +499,12 @@ fn git_branch(path: String) -> Result<Option<String>, String> {
             .ok_or_else(|| "Could not read the workspace path".to_string())?,
     )?;
     let output = Command::new("git")
-        .args(["-C", directory.to_string_lossy().as_ref(), "branch", "--show-current"])
+        .args([
+            "-C",
+            directory.to_string_lossy().as_ref(),
+            "branch",
+            "--show-current",
+        ])
         .output()
         .map_err(|error| format!("Could not inspect the git branch: {error}"))?;
 
@@ -1189,5 +1194,84 @@ mod tests {
             .unwrap()
             .sessions
             .is_empty());
+    }
+
+    /// Scratch repository below `target/`, so the fixture stays inside the
+    /// home-directory boundary `git_branch` enforces and never escapes the
+    /// build directory.
+    fn scratch_repo(name: &str, branch: &str) -> PathBuf {
+        let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join("git-branch-tests")
+            .join(name);
+
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).expect("scratch directory should be creatable");
+
+        let status = Command::new("git")
+            .args(["-C", directory.to_string_lossy().as_ref(), "init", "-q"])
+            .arg("-b")
+            .arg(branch)
+            .status()
+            .expect("git should be available");
+
+        assert!(status.success(), "git init should succeed");
+
+        directory
+    }
+
+    #[test]
+    fn git_branch_reports_the_current_branch_for_a_directory_or_a_file_in_it() {
+        let repo = scratch_repo("named-branch", "qedit-test-branch");
+        let file = repo.join("notes.txt");
+        std::fs::write(&file, "hello").expect("fixture file should be writable");
+
+        assert_eq!(
+            git_branch(repo.to_string_lossy().into_owned()).unwrap(),
+            Some("qedit-test-branch".to_string())
+        );
+        assert_eq!(
+            git_branch(file.to_string_lossy().into_owned()).unwrap(),
+            Some("qedit-test-branch".to_string()),
+            "a file path should resolve through its parent directory"
+        );
+    }
+
+    #[test]
+    fn git_branch_reports_no_branch_when_head_is_detached() {
+        let repo = scratch_repo("detached-head", "main");
+        let path = repo.to_string_lossy().into_owned();
+
+        let commit = Command::new("git")
+            .args([
+                "-C",
+                &path,
+                "-c",
+                "user.name=qedit tests",
+                "-c",
+                "user.email=tests@qedit.local",
+                "commit",
+                "-q",
+                "--allow-empty",
+                "-m",
+                "init",
+            ])
+            .status()
+            .expect("git should be available");
+        assert!(commit.success(), "fixture commit should succeed");
+
+        let detach = Command::new("git")
+            .args(["-C", &path, "checkout", "-q", "--detach"])
+            .status()
+            .expect("git should be available");
+        assert!(detach.success(), "detaching HEAD should succeed");
+
+        // The status bar hides the branch rather than reporting an error.
+        assert_eq!(git_branch(path).unwrap(), None);
+    }
+
+    #[test]
+    fn git_branch_refuses_paths_outside_the_home_directory() {
+        assert!(git_branch("/usr".to_string()).is_err());
     }
 }
