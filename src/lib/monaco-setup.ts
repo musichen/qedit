@@ -6,6 +6,7 @@ import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
 import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
 import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
 
+import { designToken } from './design-tokens';
 import { MONACO_THEMES } from './monaco-themes';
 
 declare global {
@@ -52,61 +53,133 @@ export function configureMonaco(): void {
 }
 
 function defineQEditThemes(): void {
+  const token = (name: string, fallback: string) => designToken(name, fallback);
+  const ruleColor = (name: string, fallback: string) =>
+    token(name, fallback).replace(/^#/, '');
+  const editorBackground = token('--color-bg-editor', '#303040');
+  const editorForeground = token('--color-text-primary', '#d4d4d4');
+  const muted = token('--color-text-muted', '#808080');
+  const secondary = token('--color-text-secondary', '#b0b0b0');
+  const accent = token('--color-text-accent', '#70a0ff');
+  const selection = token('--color-bg-selection', '#2050c0');
+  const border = token('--color-border-default', '#3c3c4c');
+  const subtleBorder = token('--color-border-subtle', '#2a2a3a');
+
   monaco.editor.defineTheme(MONACO_THEMES.dark, {
     base: 'vs-dark',
-    inherit: true,
+    inherit: false,
     rules: [
-      { token: 'comment', foreground: '707782', fontStyle: 'italic' },
-      { token: 'keyword', foreground: 'c6a0f6' },
-      { token: 'string', foreground: 'a6d189' },
-      { token: 'number', foreground: 'ef9f76' },
-      { token: 'type', foreground: '8caaee' },
-      { token: 'identifier', foreground: 'd5d8e0' },
+      {
+        token: 'comment',
+        foreground: ruleColor('--color-syntax-comment', '#6a9955'),
+        fontStyle: 'italic',
+      },
+      {
+        token: 'keyword',
+        foreground: ruleColor('--color-syntax-keyword', '#569cd6'),
+      },
+      {
+        token: 'string',
+        foreground: ruleColor('--color-syntax-string', '#ce9178'),
+      },
+      {
+        token: 'number',
+        foreground: ruleColor('--color-syntax-number', '#b5cea8'),
+      },
+      {
+        token: 'type',
+        foreground: ruleColor('--color-syntax-type', '#4ec9b0'),
+      },
+      {
+        token: 'function',
+        foreground: ruleColor('--color-syntax-function', '#dcdcaa'),
+      },
+      {
+        token: 'variable',
+        foreground: ruleColor('--color-syntax-variable', '#9cdcfe'),
+      },
+      { token: 'identifier', foreground: editorForeground.replace('#', '') },
     ],
     colors: {
-      'editor.background': '#17181c',
-      'editor.foreground': '#d5d8e0',
-      'editorLineNumber.foreground': '#626875',
-      'editorLineNumber.activeForeground': '#b8beca',
-      'editorCursor.foreground': '#c6a0f6',
-      'editor.selectionBackground': '#343842',
-      'editor.inactiveSelectionBackground': '#282b32',
-      'editor.lineHighlightBackground': '#1c1e23',
-      'editorIndentGuide.background': '#25282f',
-      'editorIndentGuide.activeBackground': '#343842',
-      'editorWidget.background': '#202229',
-      'editorWidget.border': '#343842',
-      'editorSuggestWidget.background': '#202229',
-      'editorSuggestWidget.border': '#343842',
+      'editor.background': editorBackground,
+      'editor.foreground': editorForeground,
+      'editorLineNumber.foreground': muted,
+      'editorLineNumber.activeForeground': secondary,
+      'editorCursor.foreground': accent,
+      'editor.selectionBackground': selection,
+      'editor.inactiveSelectionBackground': subtleBorder,
+      'editor.lineHighlightBackground': token(
+        '--color-bg-tab-active',
+        '#404050',
+      ),
+      'editorIndentGuide.background': subtleBorder,
+      'editorIndentGuide.activeBackground': border,
+      'editorWidget.background': token('--color-bg-dropdown', '#101010'),
+      'editorWidget.border': border,
+      'editorSuggestWidget.background': token(
+        '--color-bg-command-palette',
+        '#202030',
+      ),
+      'editorSuggestWidget.border': border,
     },
   });
 
   monaco.editor.defineTheme(MONACO_THEMES.light, {
-    base: 'vs',
-    inherit: true,
+    base: 'vs-dark',
+    inherit: false,
     rules: [
-      { token: 'comment', foreground: '7b8190', fontStyle: 'italic' },
-      { token: 'keyword', foreground: '7c3aed' },
-      { token: 'string', foreground: '3f7d37' },
-      { token: 'number', foreground: 'c05a21' },
-      { token: 'type', foreground: '2f5f9e' },
-      { token: 'identifier', foreground: '30333b' },
+      {
+        token: 'comment',
+        foreground: ruleColor('--color-syntax-comment', '#6a9955'),
+        fontStyle: 'italic',
+      },
+      {
+        token: 'keyword',
+        foreground: ruleColor('--color-syntax-keyword', '#569cd6'),
+      },
+      {
+        token: 'string',
+        foreground: ruleColor('--color-syntax-string', '#ce9178'),
+      },
+      {
+        token: 'number',
+        foreground: ruleColor('--color-syntax-number', '#b5cea8'),
+      },
+      {
+        token: 'type',
+        foreground: ruleColor('--color-syntax-type', '#4ec9b0'),
+      },
+      {
+        token: 'function',
+        foreground: ruleColor('--color-syntax-function', '#dcdcaa'),
+      },
+      {
+        token: 'variable',
+        foreground: ruleColor('--color-syntax-variable', '#9cdcfe'),
+      },
+      { token: 'identifier', foreground: editorForeground.replace('#', '') },
     ],
     colors: {
-      'editor.background': '#fbfbfc',
-      'editor.foreground': '#30333b',
-      'editorLineNumber.foreground': '#a0a5b0',
-      'editorLineNumber.activeForeground': '#626875',
-      'editorCursor.foreground': '#7c3aed',
-      'editor.selectionBackground': '#ddd8eb',
-      'editor.inactiveSelectionBackground': '#eceaf0',
-      'editor.lineHighlightBackground': '#f5f4f7',
-      'editorIndentGuide.background': '#e7e5ea',
-      'editorIndentGuide.activeBackground': '#d6d2dc',
-      'editorWidget.background': '#ffffff',
-      'editorWidget.border': '#dedce3',
-      'editorSuggestWidget.background': '#ffffff',
-      'editorSuggestWidget.border': '#dedce3',
+      'editor.background': editorBackground,
+      'editor.foreground': editorForeground,
+      'editorLineNumber.foreground': muted,
+      'editorLineNumber.activeForeground': secondary,
+      'editorCursor.foreground': accent,
+      'editor.selectionBackground': selection,
+      'editor.inactiveSelectionBackground': subtleBorder,
+      'editor.lineHighlightBackground': token(
+        '--color-bg-tab-active',
+        '#404050',
+      ),
+      'editorIndentGuide.background': subtleBorder,
+      'editorIndentGuide.activeBackground': border,
+      'editorWidget.background': token('--color-bg-dropdown', '#101010'),
+      'editorWidget.border': border,
+      'editorSuggestWidget.background': token(
+        '--color-bg-command-palette',
+        '#202030',
+      ),
+      'editorSuggestWidget.border': border,
     },
   });
 }

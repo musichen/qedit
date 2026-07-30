@@ -1,3 +1,106 @@
+/* qedit design system tokens. Keep component colors pointed at this layer. */
+@theme {
+  /* Surfaces */
+  --color-bg-editor: #303040;
+  --color-bg-sidebar: #202020;
+  --color-bg-menubar: #202020;
+  --color-bg-dropdown: #101010;
+  --color-bg-statusbar: #505060;
+  --color-bg-input: #303040;
+  --color-bg-tab: #303040;
+  --color-bg-tab-active: #404050;
+  --color-bg-hover: #303030;
+  --color-bg-selection: #2050c0;
+  --color-bg-command-palette: #202030;
+  --color-bg-overlay: rgb(0 0 0 / 50%);
+
+  /* Text */
+  --color-text-primary: #d4d4d4;
+  --color-text-secondary: #b0b0b0;
+  --color-text-muted: #808080;
+  --color-text-dimmed: #606060;
+  --color-text-accent: #70a0ff;
+
+  /* Borders */
+  --color-border-default: #3c3c4c;
+  --color-border-subtle: #2a2a3a;
+  --color-border-focus: #2050c0;
+
+  /* Syntax */
+  --color-syntax-comment: #6a9955;
+  --color-syntax-keyword: #569cd6;
+  --color-syntax-string: #ce9178;
+  --color-syntax-number: #b5cea8;
+  --color-syntax-function: #dcdcaa;
+  --color-syntax-variable: #9cdcfe;
+  --color-syntax-type: #4ec9b0;
+
+  /* Actions and state */
+  --color-accent: #2050c0;
+  --color-accent-hover: #3060d0;
+  --color-accent-text: #ffffff;
+  --color-danger: #f07178;
+  --color-warning: #e5c07b;
+  --color-success: #98c379;
+
+  /* Typography and layout */
+  --font-mono-qedit: 'SF Mono', 'Fira Code', Menlo, Monaco, Consolas, monospace;
+  --font-sans-qedit:
+    system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --spacing-menubar: 32px;
+  --spacing-sidebar: 250px;
+  --spacing-statusbar: 24px;
+  --spacing-tab: 36px;
+}
+
+@theme inline {
+  --color-editor: var(--color-bg-editor);
+  --color-menubar: var(--color-bg-menubar);
+  --color-dropdown: var(--color-bg-dropdown);
+  --color-statusbar: var(--color-bg-statusbar);
+  --color-input-shell: var(--color-bg-input);
+  --color-tab: var(--color-bg-tab);
+  --color-tab-active: var(--color-bg-tab-active);
+  --color-hover: var(--color-bg-hover);
+  --color-selection: var(--color-bg-selection);
+  --color-command-palette: var(--color-bg-command-palette);
+  --color-overlay: var(--color-bg-overlay);
+  --color-focus: var(--color-border-focus);
+  --font-mono: var(--font-mono-qedit);
+  --font-sans: var(--font-sans-qedit);
+}
+
+/* shadcn utilities remain available, but all values resolve to qedit tokens. */
+:root {
+  --background: var(--color-bg-editor);
+  --foreground: var(--color-text-primary);
+  --card: var(--color-bg-tab);
+  --card-foreground: var(--color-text-primary);
+  --popover: var(--color-bg-dropdown);
+  --popover-foreground: var(--color-text-primary);
+  --primary: var(--color-accent);
+  --primary-foreground: var(--color-accent-text);
+  --secondary: var(--color-bg-tab-active);
+  --secondary-foreground: var(--color-text-primary);
+  --muted: var(--color-bg-hover);
+  --muted-foreground: var(--color-text-secondary);
+  --accent: var(--color-bg-tab-active);
+  --accent-foreground: var(--color-text-primary);
+  --destructive: var(--color-danger);
+  --border: var(--color-border-default);
+  --input: var(--color-bg-input);
+  --ring: var(--color-border-focus);
+  --radius: 2px;
+  --sidebar: var(--color-bg-sidebar);
+  --sidebar-foreground: var(--color-text-primary);
+  --sidebar-primary: var(--color-accent);
+  --sidebar-primary-foreground: var(--color-accent-text);
+  --sidebar-accent: var(--color-bg-hover);
+  --sidebar-accent-foreground: var(--color-text-primary);
+  --sidebar-border: var(--color-border-subtle);
+  --sidebar-ring: var(--color-border-focus);
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @utility container {
@@ -11,74 +114,6 @@
 
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
   }
-}
-
-:root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.58 0.22 27);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.809 0.105 251.813);
-  --chart-2: oklch(0.623 0.214 259.815);
-  --chart-3: oklch(0.546 0.245 262.881);
-  --chart-4: oklch(0.488 0.243 264.376);
-  --chart-5: oklch(0.424 0.199 265.638);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.16 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.16 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.87 0 0);
-  --primary-foreground: oklch(0.16 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.371 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.809 0.105 251.813);
-  --chart-2: oklch(0.623 0.214 259.815);
-  --chart-3: oklch(0.546 0.245 262.881);
-  --chart-4: oklch(0.488 0.243 264.376);
-  --chart-5: oklch(0.424 0.199 265.638);
-  --sidebar: oklch(0.16 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
 }

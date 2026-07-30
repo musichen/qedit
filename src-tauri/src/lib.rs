@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -481,6 +482,36 @@ fn terminal_close(state: State<'_, SharedTerminalState>, session_id: u32) -> Res
     Ok(())
 }
 
+#[tauri::command]
+fn git_branch(path: String) -> Result<Option<String>, String> {
+    let requested = PathBuf::from(path);
+    let directory = if requested.is_dir() {
+        requested
+    } else {
+        requested
+            .parent()
+            .map(Path::to_path_buf)
+            .ok_or_else(|| "Could not determine the workspace directory".to_string())?
+    };
+    let directory = safe_home_path(
+        directory
+            .to_str()
+            .ok_or_else(|| "Could not read the workspace path".to_string())?,
+    )?;
+    let output = Command::new("git")
+        .args(["-C", directory.to_string_lossy().as_ref(), "branch", "--show-current"])
+        .output()
+        .map_err(|error| format!("Could not inspect the git branch: {error}"))?;
+
+    if !output.status.success() {
+        return Ok(None);
+    }
+
+    let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+    Ok((!branch.is_empty()).then_some(branch))
+}
+
 fn kill_all_terminals(state: &SharedTerminalState) {
     let sessions = match state.lock() {
         Ok(mut terminals) => terminals.sessions.drain().collect::<Vec<_>>(),
@@ -504,7 +535,8 @@ pub fn run() {
             terminal_spawn,
             terminal_write,
             terminal_resize,
-            terminal_close
+            terminal_close,
+            git_branch
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application");

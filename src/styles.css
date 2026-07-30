@@ -16,7 +16,7 @@
 
 :root {
   --font-sans-fallback:
-    'Inter Variable', system-ui, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 html,

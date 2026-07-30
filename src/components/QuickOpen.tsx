@@ -102,25 +102,25 @@ export function QuickOpen({ onClose }: { onClose: () => void }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/35 pt-[15vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-overlay pt-[15vh]"
       onClick={onClose}
       role="dialog"
       aria-label="Search files"
     >
       <div
-        className="w-full max-w-lg rounded-lg border bg-background shadow-xl"
+        className="w-full max-w-lg rounded border border-border-default bg-command-palette shadow-xl"
         onClick={(event) => event.stopPropagation()}
         role="listbox"
         aria-label="Files"
       >
         <div className="border-b px-3 py-2">
-          <div className="mb-1 text-xs font-semibold text-muted-foreground">
+          <div className="mb-1 text-xs font-semibold text-text-secondary">
             Search files
           </div>
           <input
             ref={inputRef}
             type="text"
-            className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            className="w-full bg-transparent text-sm text-text-primary outline-none placeholder:text-text-muted"
             placeholder="Search files by name or path..."
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -178,11 +178,11 @@ export function QuickOpen({ onClose }: { onClose: () => void }) {
           className="max-h-64 overflow-auto p-1"
         >
           {discovering ? (
-            <p className="px-2 py-4 text-center text-xs text-muted-foreground">
+            <p className="px-2 py-4 text-center text-xs text-text-secondary">
               Searching workspace...
             </p>
           ) : filtered.length === 0 ? (
-            <p className="px-2 py-4 text-center text-xs text-muted-foreground">
+            <p className="px-2 py-4 text-center text-xs text-text-secondary">
               {query ? 'No matching files' : 'No recent or workspace files'}
             </p>
           ) : (
@@ -196,8 +196,8 @@ export function QuickOpen({ onClose }: { onClose: () => void }) {
                 type="button"
                 className={`flex w-full min-w-0 items-center gap-2 rounded px-2 py-1.5 text-left text-sm ${
                   index === selectedIndex
-                    ? 'bg-muted text-foreground'
-                    : 'hover:bg-muted'
+                    ? 'bg-hover text-text-primary'
+                    : 'hover:bg-hover'
                 }`}
                 onMouseEnter={() => setSelectedIndex(index)}
                 onClick={() => handleSelect(entry.path, entry.name)}
@@ -206,21 +206,30 @@ export function QuickOpen({ onClose }: { onClose: () => void }) {
                 aria-selected={index === selectedIndex}
                 id={`quick-open-${encodeURIComponent(entry.path)}`}
               >
-                <File className="h-3.5 w-3.5 shrink-0 text-blue-500" />
+                <File className="h-3.5 w-3.5 shrink-0 text-syntax-variable" />
                 <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-                <span className="ml-auto max-w-[55%] min-w-0 truncate text-[11px] text-muted-foreground">
+                <span className="ml-auto max-w-[55%] min-w-0 truncate text-[11px] text-text-muted">
                   {dirnameFromPath(entry.path)}
                 </span>
               </button>
             ))
           )}
         </div>
-        <div className="border-t px-3 py-1.5 text-[11px] text-muted-foreground">
-          <kbd className="rounded border bg-muted px-1">↑↓</kbd> navigate
+        <div className="border-t border-border-default px-3 py-1.5 text-[11px] text-text-muted">
+          <kbd className="rounded border border-border-subtle bg-hover px-1">
+            ↑↓
+          </kbd>{' '}
+          navigate
           <span className="mx-2">·</span>
-          <kbd className="rounded border bg-muted px-1">Enter</kbd> open
+          <kbd className="rounded border border-border-subtle bg-hover px-1">
+            Enter
+          </kbd>{' '}
+          open
           <span className="mx-2">·</span>
-          <kbd className="rounded border bg-muted px-1">Esc</kbd> close
+          <kbd className="rounded border border-border-subtle bg-hover px-1">
+            Esc
+          </kbd>{' '}
+          close
         </div>
       </div>
     </div>
