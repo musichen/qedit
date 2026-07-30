@@ -24,7 +24,7 @@ export function TabBar() {
   };
 
   return (
-    <div className="flex h-9 items-stretch border-b bg-muted/50">
+    <div className="flex h-9 items-stretch border-b bg-muted/40">
       {openTabs.length === 0 ? (
         <span className="flex min-w-0 flex-1 items-center px-4 text-xs text-muted-foreground">
           No open files
@@ -99,7 +99,7 @@ function Tab({
       className={`group flex h-full min-w-0 max-w-56 cursor-pointer items-center gap-1.5 border-r px-3 text-sm transition-colors ${
         isActive
           ? 'border-t-2 border-t-primary bg-background text-foreground'
-          : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+          : 'bg-muted/40 text-muted-foreground hover:bg-muted/70'
       }`}
       onClick={onSelect}
       onKeyDown={(event) => {

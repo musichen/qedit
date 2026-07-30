@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 
+import { useSettingsOrDefault } from './SettingsContext';
 import { useWorkspace } from './WorkspaceContext';
 
 import {
@@ -29,6 +30,42 @@ import '@xterm/xterm/css/xterm.css';
 type TerminalEvent =
   | { kind: 'output'; data: string }
   | { kind: 'exit'; code: number | null };
+
+function terminalTheme(theme: 'light' | 'dark') {
+  return theme === 'dark'
+    ? {
+        background: '#17181c',
+        foreground: '#d5d8e0',
+        cursor: '#c6a0f6',
+        selectionBackground: '#343842',
+        black: '#17181c',
+        red: '#e78284',
+        green: '#a6d189',
+        yellow: '#e5c890',
+        blue: '#8caaee',
+        magenta: '#ca9ee6',
+        cyan: '#81c8be',
+        white: '#d5d8e0',
+        brightBlack: '#626875',
+        brightWhite: '#f0f1f3',
+      }
+    : {
+        background: '#fbfbfc',
+        foreground: '#30333b',
+        cursor: '#7c3aed',
+        selectionBackground: '#ddd8eb',
+        black: '#30333b',
+        red: '#b42318',
+        green: '#3f7d37',
+        yellow: '#9a6700',
+        blue: '#2f5f9e',
+        magenta: '#7c3aed',
+        cyan: '#267d7b',
+        white: '#fbfbfc',
+        brightBlack: '#7b8190',
+        brightWhite: '#ffffff',
+      };
+}
 
 export function TerminalPanel() {
   const { workspaceRoot } = useWorkspace();
@@ -175,11 +212,11 @@ export function TerminalPanel() {
 
   return (
     <section
-      className="flex h-52 min-h-0 flex-col border-t bg-[#111318]"
+      className="flex h-52 min-h-0 flex-col border-t bg-card"
       aria-label="Terminal panel"
     >
-      <div className="flex h-9 shrink-0 items-stretch border-b border-white/10 text-xs font-medium text-slate-300">
-        <div className="flex shrink-0 items-center gap-2 border-r border-white/10 px-3">
+      <div className="flex h-9 shrink-0 items-stretch border-b text-xs font-medium text-muted-foreground">
+        <div className="flex shrink-0 items-center gap-2 border-r px-3">
           <TerminalIcon className="h-3.5 w-3.5" />
           <span>Terminal</span>
         </div>
@@ -237,7 +274,7 @@ export function TerminalPanel() {
         </div>
         <button
           type="button"
-          className="flex shrink-0 items-center gap-1.5 border-l border-white/10 px-3 text-slate-300 hover:bg-white/5 hover:text-slate-100"
+          className="flex shrink-0 items-center gap-1.5 border-l px-3 text-muted-foreground hover:bg-muted hover:text-foreground"
           onClick={addTerminal}
           aria-label="New terminal"
           title="New terminal"
@@ -246,10 +283,10 @@ export function TerminalPanel() {
           <span>New Terminal</span>
         </button>
       </div>
-      <div className="flex h-5 shrink-0 items-center gap-2 px-3 text-[10px] text-slate-500">
+      <div className="flex h-5 shrink-0 items-center gap-2 px-3 text-[10px] text-muted-foreground/70">
         {activeTab && <span>{statusLabel(activeTab.status)}</span>}
         {activeTab?.error && (
-          <span className="flex min-w-0 items-center gap-1 text-red-300">
+          <span className="flex min-w-0 items-center gap-1 text-destructive">
             <AlertCircle className="h-3 w-3" />
             <span className="truncate">{activeTab.error}</span>
           </span>
@@ -334,22 +371,22 @@ function TerminalTab({
 
   const statusClass =
     tab.status === 'error'
-      ? 'text-red-300'
+      ? 'text-destructive'
       : tab.status === 'exited'
-        ? 'text-slate-500'
+        ? 'text-muted-foreground/60'
         : tab.status === 'running'
-          ? 'text-emerald-300'
-          : 'text-amber-300';
+          ? 'text-emerald-500'
+          : 'text-amber-500';
 
   return (
     <div
       ref={setRef}
       draggable={!isRenaming}
       data-terminal-tab={tab.id}
-      className={`group flex h-full min-w-28 max-w-56 shrink-0 cursor-pointer items-center gap-1.5 border-r border-white/10 px-2.5 text-[11px] transition-colors ${
+      className={`group flex h-full min-w-28 max-w-56 shrink-0 cursor-pointer items-center gap-1.5 border-r px-2.5 text-[11px] transition-colors ${
         isActive
-          ? 'border-t-2 border-t-primary bg-[#181b22] text-slate-100'
-          : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+          ? 'border-t-2 border-t-primary bg-background text-foreground'
+          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
       }`}
       onClick={onSelect}
       onDoubleClick={(event) => {
@@ -436,7 +473,7 @@ function TerminalTab({
           <span className="sr-only">Close </span>
           <button
             type="button"
-            className="rounded p-0.5 hover:bg-white/10"
+            className="rounded p-0.5 hover:bg-muted"
             onClick={(event) => {
               event.stopPropagation();
               onClose();
@@ -467,13 +504,18 @@ function TerminalInstance({
   onStatus: (id: string, status: TerminalStatus, error?: string | null) => void;
   onOutput: (id: string) => void;
 }) {
+  const { settings, resolvedTheme } = useSettingsOrDefault();
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<import('@xterm/xterm').Terminal | null>(null);
   const fitRef = useRef<import('@xterm/addon-fit').FitAddon | null>(null);
   const sessionRef = useRef<number | null>(null);
   const initialWorkspaceRootRef = useRef(workspaceRoot);
   const activeRef = useRef(isActive);
+  const settingsRef = useRef(settings);
+  const resolvedThemeRef = useRef(resolvedTheme);
   activeRef.current = isActive;
+  settingsRef.current = settings;
+  resolvedThemeRef.current = resolvedTheme;
 
   useEffect(() => {
     let disposed = false;
@@ -503,11 +545,8 @@ function TerminalInstance({
         const terminal = new Terminal({
           cursorBlink: true,
           fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-          fontSize: 12,
-          theme: {
-            background: '#111318',
-            foreground: '#d5d8e0',
-          },
+          fontSize: settingsRef.current.terminalFontSize,
+          theme: terminalTheme(resolvedThemeRef.current),
         });
         const fit = new FitAddon();
         terminal.loadAddon(fit);
@@ -667,6 +706,15 @@ function TerminalInstance({
       if (sessionId !== null) closeSession(sessionId);
     };
   }, [id, onOutput, onStatus]);
+
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+
+    terminal.options.fontSize = settings.terminalFontSize;
+    terminal.options.theme = terminalTheme(resolvedTheme);
+    if (activeRef.current) fitRef.current?.fit();
+  }, [resolvedTheme, settings.terminalFontSize]);
 
   useEffect(() => {
     const focusTerminal = () => {

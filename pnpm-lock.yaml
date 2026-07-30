@@ -60,6 +60,9 @@ catalogs:
     '@tauri-apps/plugin-shell':
       specifier: ^2.0.0
       version: 2.3.5
+    '@tauri-apps/plugin-store':
+      specifier: ^2.0.0
+      version: 2.4.4
     '@testing-library/dom':
       specifier: ^10.4.1
       version: 10.4.1
@@ -212,6 +215,9 @@ importers:
       '@tauri-apps/plugin-shell':
         specifier: 'catalog:'
         version: 2.3.5
+      '@tauri-apps/plugin-store':
+        specifier: 'catalog:'
+        version: 2.4.4
       '@xterm/addon-fit':
         specifier: 'catalog:'
         version: 0.11.0
@@ -2230,6 +2236,9 @@ packages:
 
   '@tauri-apps/plugin-shell@2.3.5':
     resolution: {integrity: sha512-jewtULhiQ7lI7+owCKAjc8tYLJr92U16bPOeAa472LHJdgaibLP83NcfAF2e+wkEcA53FxKQAZ7byDzs2eeizg==}
+
+  '@tauri-apps/plugin-store@2.4.4':
+    resolution: {integrity: sha512-oxSMaj/QpVfJcBMYX5aOQV94fWvga0MwQMfD6TLlbK2dh+ShPWAzefd8HWXhvOKjPRJdGVAkW7ZGO76JzzjaDA==}
 
   '@testing-library/dom@10.4.1':
     resolution: {integrity: sha512-o4PXJQidqJl82ckFaXUeoAW+XysPLauYI43Abki5hABd853iMhitooc6znOnczgbTYmEP6U6/y1ZyKAIsvMKGg==}
@@ -5127,6 +5136,10 @@ snapshots:
       '@tauri-apps/api': 2.11.1
 
   '@tauri-apps/plugin-shell@2.3.5':
+    dependencies:
+      '@tauri-apps/api': 2.11.1
+
+  '@tauri-apps/plugin-store@2.4.4':
     dependencies:
       '@tauri-apps/api': 2.11.1
 

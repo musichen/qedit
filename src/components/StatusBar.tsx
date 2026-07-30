@@ -1,6 +1,11 @@
+import { Settings } from 'lucide-react';
+import { useState } from 'react';
+
 import { useEditor } from './EditorContext';
+import { SettingsPanel } from './SettingsPanel';
 
 export function StatusBar() {
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const {
     activeFilePath,
     openTabs,
@@ -78,12 +83,24 @@ export function StatusBar() {
         <span>UTF-8</span>
         <span>{language}</span>
       </div>
-      <span
-        className="max-w-[30%] truncate text-xs text-muted-foreground/60"
-        title={activeFilePath ?? undefined}
-      >
-        {displayPath}
-      </span>
+      <div className="flex min-w-0 shrink-0 items-center gap-2">
+        <span
+          className="max-w-[30%] truncate text-xs text-muted-foreground/60"
+          title={activeFilePath ?? undefined}
+        >
+          {displayPath}
+        </span>
+        <button
+          type="button"
+          className="rounded p-1 text-muted-foreground hover:bg-background hover:text-foreground"
+          onClick={() => setSettingsOpen(true)}
+          aria-label="Open preferences"
+          title="Preferences"
+        >
+          <Settings className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
     </div>
   );
 }

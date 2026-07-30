@@ -55,8 +55,8 @@ export function FileTree() {
   );
 
   return (
-    <aside className="flex h-full min-h-0 flex-col border-r bg-muted/30">
-      <div className="flex items-center justify-between border-b px-3 py-2">
+    <aside className="flex h-full min-h-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+      <div className="flex h-9 items-center justify-between border-b border-sidebar-border px-3">
         <div className="flex min-w-0 items-center gap-2">
           <Home className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <span className="truncate text-xs font-medium">Explorer</span>
@@ -64,7 +64,7 @@ export function FileTree() {
         <div className="flex items-center gap-0.5">
           <button
             type="button"
-            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="rounded p-1 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
             onClick={() => void openFileDialog()}
             aria-label="Open file"
             title="Open File (Cmd/Ctrl+O)"
@@ -73,7 +73,7 @@ export function FileTree() {
           </button>
           <button
             type="button"
-            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="rounded p-1 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
             onClick={() => void createFile()}
             aria-label="New file"
             title="New File in Workspace"
@@ -82,7 +82,7 @@ export function FileTree() {
           </button>
           <button
             type="button"
-            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="rounded p-1 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
             onClick={() => window.dispatchEvent(new Event('qedit:quick-open'))}
             aria-label="Search files"
             title="Search Files (Cmd/Ctrl+P)"
@@ -91,7 +91,7 @@ export function FileTree() {
           </button>
           <button
             type="button"
-            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="rounded p-1 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
             onClick={() => void openFolderDialog()}
             aria-label="Open folder"
             title="Open Folder or Project (Cmd/Ctrl+Shift+O)"
@@ -121,7 +121,7 @@ export function FileTree() {
           </div>
         )}
 
-        <section className="border-b px-2 py-2">
+        <section className="border-b border-sidebar-border px-2 py-2">
           <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             <Clock className="h-3 w-3" />
             Recent
@@ -136,7 +136,7 @@ export function FileTree() {
                 <button
                   key={project.projectPath}
                   type="button"
-                  className="flex w-full min-w-0 items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                  className="flex w-full min-w-0 items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
                   onClick={() => void openRecentProject(project.projectPath)}
                   title={project.projectPath}
                 >
@@ -148,10 +148,10 @@ export function FileTree() {
                 <button
                   key={file.filePath}
                   type="button"
-                  className={`flex w-full min-w-0 items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs hover:bg-muted ${
+                  className={`flex w-full min-w-0 items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs hover:bg-sidebar-accent ${
                     activeFilePath === file.filePath
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground'
+                      ? 'bg-sidebar-accent text-sidebar-foreground'
+                      : 'text-sidebar-foreground/70'
                   }`}
                   onClick={() =>
                     handleOpenFile(file.filePath, file.displayName)
@@ -167,7 +167,7 @@ export function FileTree() {
         </section>
 
         <section className="min-h-0">
-          <div className="flex items-center gap-1 border-b px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <div className="flex items-center gap-1 border-b border-sidebar-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/60">
             {workspaceRoot ? (
               <>
                 <FolderOpen className="h-3 w-3 text-amber-500" />
@@ -176,7 +176,7 @@ export function FileTree() {
                 </span>
                 <button
                   type="button"
-                  className="ml-auto rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  className="ml-auto rounded p-1 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
                   onClick={() => void refreshWorkspace()}
                   aria-label="Refresh workspace"
                   title="Refresh Workspace"
