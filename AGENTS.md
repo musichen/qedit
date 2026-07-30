@@ -22,6 +22,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - **UI library**: `packages/ui` — shadcn components (Tailwind v4) plus `cn()` utility.
 - **Shared**: `packages/shared` — `cn` utility, event emitter context, registry pattern, mode utils.
 - **Tooling**: `tooling/typescript` — shared `base.json` tsconfig.
+- **Marketing website**: `website/` — standalone `@qedit/website` Vite + React static app (own `package.json`, not part of the desktop app's dependency graph), added to `pnpm-workspace.yaml` as its own package. No SSR, backend, or API; external links and release metadata are centralized in `website/src/content.ts`. Deployed to GitHub Pages by `.github/workflows/website.yml` on pushes to `main` touching `website/**`, using the official `actions/configure-pages` + `actions/deploy-pages` flow with `VITE_BASE_PATH=/qedit/` (see `website/vite.config.ts` for the base-path fallback and `website/README.md` for retargeting to `qedit.github.io` or a custom domain).
 
 ## Commands
 
@@ -37,6 +38,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 | `pnpm run typecheck` | Root tsc plus package typechecks via Turbo |
 | `pnpm run test` | Root Vitest plus package tests via Turbo |
 | `pnpm run build` | Root Vite production build |
+| `pnpm run website:build` | Build the `website/` marketing site (`pnpm --filter @qedit/website build`) |
 | `pnpm run build:native` | Full Tauri desktop build (Rust + frontend) |
 | `pnpm run db:generate` | drizzle-kit generate migrations |
 

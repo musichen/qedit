@@ -1,6 +1,7 @@
 packages:
   - packages/**
   - tooling/**
+  - website
 allowBuilds:
   '@parcel/watcher': true
   '@swc/core': true
