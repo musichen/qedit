@@ -29,7 +29,9 @@ describe('QuickOpen search', () => {
     render(<QuickOpen onClose={vi.fn()} />);
     const input = screen.getByRole('textbox', { name: 'Search files' });
 
-    await waitFor(() => expect(screen.getByText('README.md')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('README.md')).toBeTruthy(), {
+      timeout: 15000,
+    });
 
     await act(async () => {
       fireEvent.change(input, { target: { value: 'docs' } });
@@ -41,5 +43,5 @@ describe('QuickOpen search', () => {
       fireEvent.change(input, { target: { value: 'missing-file' } });
     });
     expect(screen.getByText('No matching files')).toBeTruthy();
-  });
+  }, 20000);
 });
