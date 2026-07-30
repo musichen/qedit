@@ -36,6 +36,8 @@ jobs:
         env:
           VITE_BASE_PATH: /qedit/
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: website/dist
