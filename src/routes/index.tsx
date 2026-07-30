@@ -1,15 +1,18 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { CommandPalette } from '#/components/CommandPalette';
 import { Editor } from '#/components/Editor';
 import { EditorProvider, useEditor } from '#/components/EditorContext';
 import { FileTree } from '#/components/FileTree';
+import { MenuBar } from '#/components/MenuBar';
 import { QuickOpen } from '#/components/QuickOpen';
-import { SettingsProvider } from '#/components/SettingsContext';
+import { SettingsProvider, useSettings } from '#/components/SettingsContext';
 import { StatusBar } from '#/components/StatusBar';
 import { TabBar } from '#/components/TabBar';
 import { TerminalPanel } from '#/components/TerminalPanel';
 import { useWorkspace, WorkspaceProvider } from '#/components/WorkspaceContext';
+import { isMenuActionAvailable } from '#/lib/menu-actions';
 import { shortcutActionForEvent } from '#/lib/shortcuts';
 
 export const Route = createFileRoute('/')({
@@ -32,6 +35,7 @@ function EditorLayout() {
   const {
     activeFilePath,
     closeTab,
+    closeAllTabs,
     openTabs,
     hasDirtyTabs,
     dirtyTabCount,
@@ -41,8 +45,13 @@ function EditorLayout() {
     saveActiveFile,
     saveActiveFileAs,
   } = useEditor();
-  const { openFileDialog, openFolderDialog } = useWorkspace();
+  const { openFileDialog, openFolderDialog, createFile } = useWorkspace();
+  const { settings, setMode, setSetting } = useSettings();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [statusBarVisible, setStatusBarVisible] = useState(true);
+  const [terminalVisible, setTerminalVisible] = useState(false);
   const [quickOpenVisible, setQuickOpenVisible] = useState(false);
+  const [commandPaletteVisible, setCommandPaletteVisible] = useState(false);
   const dirtyStateRef = useRef({ hasDirtyTabs, dirtyTabCount });
   dirtyStateRef.current = { hasDirtyTabs, dirtyTabCount };
 
@@ -58,6 +67,7 @@ function EditorLayout() {
       event.stopPropagation();
 
       if (/^terminal-[1-9]$/.test(action)) {
+        setTerminalVisible(true);
         window.dispatchEvent(
           new CustomEvent('qedit:terminal-tab', {
             detail: Number(action.slice('terminal-'.length)) - 1,
@@ -116,12 +126,17 @@ function EditorLayout() {
           window.dispatchEvent(new Event('qedit:terminal-close'));
           break;
         case 'next-terminal':
+          setTerminalVisible(true);
           window.dispatchEvent(new Event('qedit:terminal-next'));
           break;
         case 'previous-terminal':
+          setTerminalVisible(true);
           window.dispatchEvent(new Event('qedit:terminal-previous'));
           break;
         case 'focus-terminal':
+          // Revealing the panel makes its active terminal focus itself, so the
+          // chord works the same whether or not the panel was already open.
+          setTerminalVisible(true);
           window.dispatchEvent(new Event('qedit:focus-terminal'));
           break;
         case 'focus-editor':
@@ -129,6 +144,12 @@ function EditorLayout() {
           break;
         case 'quick-open':
           setQuickOpenVisible(true);
+          break;
+        case 'command-palette':
+          setCommandPaletteVisible(true);
+          break;
+        case 'toggle-sidebar':
+          setSidebarOpen((visible) => !visible);
           break;
         case 'find':
           window.dispatchEvent(new Event('qedit:find'));
@@ -146,6 +167,120 @@ function EditorLayout() {
       openFolderDialog,
       saveActiveFile,
       saveActiveFileAs,
+    ],
+  );
+
+  const runMenuAction = useCallback(
+    (action: string) => {
+      switch (action) {
+        case 'app.preferences':
+          window.dispatchEvent(new Event('qedit:open-settings'));
+          break;
+        case 'file.new':
+          void createFile();
+          break;
+        case 'file.open':
+          void openFileDialog();
+          break;
+        case 'file.openFolder':
+          void openFolderDialog();
+          break;
+        case 'file.save':
+          void saveActiveFile();
+          break;
+        case 'file.saveAs':
+          void saveActiveFileAs();
+          break;
+        case 'file.close':
+          if (activeFilePath) closeTab(activeFilePath);
+          break;
+        case 'file.closeAll':
+          closeAllTabs();
+          break;
+        case 'file.reopen':
+          reopenLastClosedTab();
+          break;
+        case 'file.reload':
+          reloadActiveFile();
+          break;
+        case 'view.toggleSidebar':
+          setSidebarOpen((visible) => !visible);
+          break;
+        case 'view.toggleStatusBar':
+          setStatusBarVisible((visible) => !visible);
+          break;
+        case 'view.toggleTerminal':
+          setTerminalVisible((visible) => !visible);
+          break;
+        case 'view.commandPalette':
+          setCommandPaletteVisible(true);
+          break;
+        case 'view.quickOpen':
+          setQuickOpenVisible(true);
+          break;
+        case 'view.toggleMinimap':
+          setSetting('minimap', !settings.minimap);
+          break;
+        case 'view.toggleWordWrap':
+          setSetting('wordWrap', settings.wordWrap === 'off' ? 'on' : 'off');
+          break;
+        case 'appearance.dark':
+          setMode('dark');
+          break;
+        case 'appearance.light':
+          setMode('light');
+          break;
+        case 'appearance.system':
+          setMode('system');
+          break;
+        case 'edit.find':
+          window.dispatchEvent(new Event('qedit:find'));
+          break;
+        case 'terminal.new':
+          setTerminalVisible(true);
+          window.dispatchEvent(new Event('qedit:terminal-new'));
+          break;
+        case 'terminal.focus':
+          setTerminalVisible(true);
+          window.dispatchEvent(new Event('qedit:focus-terminal'));
+          break;
+        case 'terminal.next':
+          window.dispatchEvent(new Event('qedit:terminal-next'));
+          break;
+        case 'terminal.previous':
+          window.dispatchEvent(new Event('qedit:terminal-previous'));
+          break;
+        case 'terminal.close':
+          window.dispatchEvent(new Event('qedit:terminal-close'));
+          break;
+        default:
+          // Only actions the registry knows about reach the menu enabled, so
+          // anything else here is a wiring bug rather than a user-facing no-op.
+          if (isMenuActionAvailable(action)) {
+            window.dispatchEvent(
+              new CustomEvent('qedit:editor-command', { detail: action }),
+            );
+          } else {
+            console.warn(`Unhandled menu action: ${action}`);
+          }
+          break;
+      }
+    },
+    [
+      activeFilePath,
+      closeAllTabs,
+      closeTab,
+      createFile,
+      openFileDialog,
+      openFolderDialog,
+      reloadActiveFile,
+      reopenLastClosedTab,
+      saveActiveFile,
+      saveActiveFileAs,
+      setMode,
+      setSetting,
+      settings.minimap,
+      settings.wordWrap,
     ],
   );
 
@@ -222,30 +357,36 @@ function EditorLayout() {
   }, []);
 
   return (
-    <div className="grid h-screen w-screen overflow-hidden bg-background text-foreground">
-      <div className="grid h-screen grid-cols-[240px_1fr] grid-rows-[auto_1fr_auto_auto]">
-        <div className="col-start-1 row-span-3 row-start-1 min-h-0 overflow-hidden">
-          <FileTree />
-        </div>
-
-        <div className="col-start-2 row-start-1">
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-editor font-sans text-text-primary">
+      <MenuBar onAction={runMenuAction} />
+      <div
+        className="grid min-h-0 flex-1"
+        style={{
+          gridTemplateColumns: sidebarOpen
+            ? 'var(--spacing-sidebar) minmax(0, 1fr)'
+            : '0 minmax(0, 1fr)',
+        }}
+      >
+        <aside className="min-h-0 overflow-hidden" aria-hidden={!sidebarOpen}>
+          {sidebarOpen && <FileTree />}
+        </aside>
+        <main className="grid min-h-0 min-w-0 grid-rows-[var(--spacing-tab)_minmax(0,1fr)_auto] overflow-hidden">
           <TabBar />
-        </div>
-
-        <div className="col-start-2 row-start-2 min-h-0 overflow-hidden">
-          <Editor />
-        </div>
-
-        <div className="col-start-2 row-start-3">
-          <TerminalPanel />
-        </div>
-
-        <div className="col-span-2 row-start-4">
-          <StatusBar />
-        </div>
+          <div className="min-h-0 overflow-hidden">
+            <Editor />
+          </div>
+          <TerminalPanel visible={terminalVisible} />
+        </main>
       </div>
+      {statusBarVisible && <StatusBar />}
       {quickOpenVisible && (
         <QuickOpen onClose={() => setQuickOpenVisible(false)} />
+      )}
+      {commandPaletteVisible && (
+        <CommandPalette
+          onClose={() => setCommandPaletteVisible(false)}
+          onCommand={runMenuAction}
+        />
       )}
     </div>
   );

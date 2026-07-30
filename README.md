@@ -7,13 +7,17 @@ Monaco as the editing surface.
 
 ## Usage
 
+- A menu bar spans the top of the window with the full command surface (qedit,
+  File, Edit, Selection, View, Go, Run, Terminal, Window, Help). Commands qedit
+  does not perform yet are shown greyed out rather than doing nothing.
 - Start from the welcome screen: **Open File** loads a single file, **Open
   Folder** loads a project into the Explorer sidebar. Both use the native
   dialogs, and recently opened files and projects are listed for one click
   reopening.
-- The Explorer lists the open workspace and expands folders on demand. Hidden
-  entries, symlinks, and `node_modules`, `target`, `dist`, and `.turbo` are
-  skipped.
+- The Explorer sidebar is hidden until you show it with **Cmd/Ctrl+B** or
+  **View > Toggle Sidebar**. It lists the open workspace and expands folders on
+  demand. Hidden entries, symlinks, and `node_modules`, `target`, `dist`, and
+  `.turbo` are skipped.
 - The Explorer toolbar creates a new empty file in the open workspace, refreshes
   after file mutations, and exposes filename/path search. New files stay inside
   the workspace and `$HOME`; cancellation and invalid destinations leave the
@@ -27,26 +31,35 @@ Monaco as the editing surface.
   the tab to it; it refuses a target that is already open in another tab.
 - Quick open (**Cmd/Ctrl+P**) searches the workspace files and your recent files
   by name or path, with arrow keys, Home/End, and Enter to open.
+- The command palette (**Cmd/Ctrl+Shift+P**) searches every menu command by
+  name, with arrow keys to move and Enter to run. It lists only the commands
+  qedit can actually perform, so every entry does something.
 - Markdown files open with a rendered Preview by default; the Edit/Preview
   toggle returns to Monaco editing. Rendering is local and safe, with readable
   headings, lists, code blocks, and restricted links.
 - A file that is still loading, or that failed to read, cannot be edited or
   saved - the status bar reports the reason. The status bar also shows the file
-  path, cursor position, indentation, language, the current state (loading,
-  unsaved, saving, saved, or failed), and any save error.
+  path, cursor position, indentation, language, the git branch of the active
+  file (`git:-` when there is none), the current state (loading, unsaved,
+  saving, saved, or failed), and any save error. **View > Toggle Status Bar**
+  hides it.
 - An integrated terminal panel sits below the editor and runs your `$SHELL`
   (`%COMSPEC%` on Windows) in the open project directory, or your home directory
-  when no folder is open. It follows the workspace root, reports each tab's state
-  (starting, running, exited, or error), and its shells are terminated when the
-  app exits. **Cmd/Ctrl+\`** moves focus between the editor and the terminal.
+  when no folder is open. It stays hidden until **View > Toggle Terminal**, or a
+  shortcut that focuses or switches terminals (such as **Cmd/Ctrl+\`**),
+  reveals it. It follows the workspace root, reports each tab's state (starting,
+  running, exited, or error), and its shells are terminated when the app exits.
+  **Cmd/Ctrl+\`** moves focus between the editor and the terminal.
 - The terminal panel supports multiple tabs: the **+** button opens another
   session, double-click or **F2** renames a tab, drag-and-drop or
   **Cmd/Ctrl+Arrow Left/Right** reorders tabs, and switching tabs keeps every
   session's output and shell state alive in the background.
-- The gear icon in the status bar opens **Preferences**: a Dark, Light, or
-  Auto (OS-matched) theme, plus editor (font size, tab size, word wrap,
-  minimap, line numbers) and terminal (font size) settings. Changes save
-  automatically and persist across restarts.
+- The gear icon in the status bar and **qedit > Preferences** open
+  **Preferences**: a Dark, Light, or Auto (OS-matched) theme, plus editor (font
+  size, tab size, word wrap, minimap, line numbers) and terminal (font size)
+  settings. Changes save automatically and persist across restarts.
+  **View > Appearance** switches the same theme setting, and
+  **View > Toggle Minimap** / **Toggle Word Wrap** the matching editor ones.
 
 ### Shortcuts
 
@@ -67,6 +80,8 @@ Monaco as the editing surface.
 | **Cmd/Ctrl+1-9** (in terminal) | Jump to terminal tab N |
 | **Cmd/Ctrl+W** (in terminal) | Close active terminal tab |
 | **Cmd/Ctrl+P** | Quick open |
+| **Cmd/Ctrl+Shift+P** | Command palette |
+| **Cmd/Ctrl+B** | Toggle the Explorer sidebar |
 | **Cmd/Ctrl+F** | Find in file |
 
 File, folder, and terminal access is limited to `$HOME`. Recent files, recent

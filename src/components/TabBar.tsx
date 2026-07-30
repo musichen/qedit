@@ -24,9 +24,9 @@ export function TabBar() {
   };
 
   return (
-    <div className="flex h-9 items-stretch border-b bg-muted/40">
+    <div className="flex h-tab items-stretch border-b border-border-subtle bg-tab">
       {openTabs.length === 0 ? (
-        <span className="flex min-w-0 flex-1 items-center px-4 text-xs text-muted-foreground">
+        <span className="flex min-w-0 flex-1 items-center px-4 text-xs text-text-muted">
           No open files
         </span>
       ) : (
@@ -62,10 +62,10 @@ export function TabBar() {
           ))}
         </div>
       )}
-      <div className="flex shrink-0 items-center gap-0.5 border-l px-1">
+      <div className="flex shrink-0 items-center gap-0.5 border-l border-border-subtle px-1">
         <button
           type="button"
-          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+          className="rounded p-1 text-text-muted hover:bg-hover hover:text-text-primary disabled:pointer-events-none disabled:opacity-40"
           onClick={() => void saveActiveFileAs()}
           disabled={!activeFilePath}
           aria-label="Save file as"
@@ -98,8 +98,8 @@ function Tab({
       ref={setRef}
       className={`group flex h-full min-w-0 max-w-56 cursor-pointer items-center gap-1.5 border-r px-3 text-sm transition-colors ${
         isActive
-          ? 'border-t-2 border-t-primary bg-background text-foreground'
-          : 'bg-muted/40 text-muted-foreground hover:bg-muted/70'
+          ? 'border-t-2 border-t-accent bg-tab-active text-text-primary'
+          : 'bg-tab text-text-secondary hover:bg-hover'
       }`}
       onClick={onSelect}
       onKeyDown={(event) => {
@@ -130,7 +130,7 @@ function Tab({
       <span className="flex min-w-0 items-center gap-1">
         {tab.isModified && (
           <span
-            className="inline-block h-2 w-2 shrink-0 rounded-full bg-accent-foreground"
+            className="inline-block h-2 w-2 shrink-0 rounded-full bg-accent-text"
             aria-label="Unsaved changes"
           />
         )}
@@ -138,7 +138,7 @@ function Tab({
       </span>
       <button
         type="button"
-        className="ml-1 shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-muted-foreground/20 group-hover:opacity-100 group-focus-within:opacity-100"
+        className="ml-1 shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-hover group-hover:opacity-100 group-focus-within:opacity-100"
         onClick={(event) => {
           event.stopPropagation();
           onClose();

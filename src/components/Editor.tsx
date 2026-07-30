@@ -8,6 +8,7 @@ import { EmptyState } from './EmptyState';
 import { useSettings } from './SettingsContext';
 
 import { MarkdownPreview } from '#/lib/markdown';
+import { EDITOR_MENU_COMMANDS } from '#/lib/menu-actions';
 import { MONACO_THEMES } from '#/lib/monaco-themes';
 
 export function Editor() {
@@ -41,6 +42,20 @@ export function Editor() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    const handleCommand = (event: Event) => {
+      const action = (event as CustomEvent<string>).detail;
+      const command = EDITOR_MENU_COMMANDS[action];
+
+      if (command) editorRef.current?.trigger('menu', command, null);
+    };
+
+    window.addEventListener('qedit:editor-command', handleCommand);
+
+    return () =>
+      window.removeEventListener('qedit:editor-command', handleCommand);
   }, []);
 
   useEffect(() => {
@@ -98,21 +113,19 @@ export function Editor() {
 
   if (status?.kind === 'error') {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 bg-background p-6 text-center">
-        <p className="text-sm font-medium text-destructive">
+      <div className="flex h-full flex-col items-center justify-center gap-2 bg-editor p-6 text-center">
+        <p className="text-sm font-medium text-danger">
           Could not open {activeFilePath}
         </p>
-        <p className="max-w-lg text-xs text-muted-foreground">
-          {status.message}
-        </p>
+        <p className="max-w-lg text-xs text-text-secondary">{status.message}</p>
       </div>
     );
   }
 
   if (!monacoReady) {
     return (
-      <div className="flex h-full items-center justify-center bg-background">
-        <span className="text-xs text-muted-foreground">Loading editor...</span>
+      <div className="flex h-full items-center justify-center bg-editor">
+        <span className="text-xs text-text-secondary">Loading editor...</span>
       </div>
     );
   }
@@ -121,8 +134,8 @@ export function Editor() {
   // content must not be editable into an unread buffer.
   if (status?.kind !== 'loaded') {
     return (
-      <div className="flex h-full items-center justify-center bg-background">
-        <span className="text-xs text-muted-foreground">
+      <div className="flex h-full items-center justify-center bg-editor">
+        <span className="text-xs text-text-secondary">
           Loading {activeFilePath}...
         </span>
       </div>
@@ -133,16 +146,16 @@ export function Editor() {
 
   if (language === 'markdown') {
     return (
-      <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="flex h-9 shrink-0 items-center justify-between border-b px-3 text-xs">
-          <span className="font-medium text-muted-foreground">Markdown</span>
-          <div className="flex items-center gap-1 rounded border p-0.5">
+      <div className="flex h-full min-h-0 flex-col bg-editor">
+        <div className="flex h-tab shrink-0 items-center justify-between border-b border-border-subtle px-3 text-xs">
+          <span className="font-medium text-text-secondary">Markdown</span>
+          <div className="flex items-center gap-1 rounded border border-border-default p-0.5">
             <button
               type="button"
               className={`inline-flex items-center gap-1 rounded px-2 py-1 ${
                 !markdownPreview
-                  ? 'bg-muted text-foreground'
-                  : 'text-muted-foreground'
+                  ? 'bg-hover text-text-primary'
+                  : 'text-text-secondary'
               }`}
               onClick={() => setMarkdownPreview(false)}
               aria-pressed={!markdownPreview}
@@ -154,8 +167,8 @@ export function Editor() {
               type="button"
               className={`inline-flex items-center gap-1 rounded px-2 py-1 ${
                 markdownPreview
-                  ? 'bg-muted text-foreground'
-                  : 'text-muted-foreground'
+                  ? 'bg-hover text-text-primary'
+                  : 'text-text-secondary'
               }`}
               onClick={() => setMarkdownPreview(true)}
               aria-pressed={markdownPreview}

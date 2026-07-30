@@ -15,6 +15,16 @@ export class WorkspaceBridgeError extends Error {
 export const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
+export async function readGitBranch(path: string): Promise<string | null> {
+  if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) {
+    return null;
+  }
+
+  const { invoke } = await import('@tauri-apps/api/core');
+
+  return invoke<string | null>('git_branch', { path });
+}
+
 /**
  * Normalize a native path for boundary checks without depending on Node APIs.
  * Dialog selections are absolute paths, but this also handles Windows separators

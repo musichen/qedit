@@ -1,11 +1,14 @@
 import { Settings } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { useEditor } from './EditorContext';
 import { SettingsPanel } from './SettingsPanel';
 
+import { readGitBranch } from '#/lib/workspace-bridge';
+
 export function StatusBar() {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [gitBranch, setGitBranch] = useState<string | null>(null);
   const {
     activeFilePath,
     openTabs,
@@ -17,6 +20,35 @@ export function StatusBar() {
     saveError,
     saveErrorOwnsActiveFile,
   } = useEditor();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!activeFilePath) {
+      setGitBranch(null);
+      return;
+    }
+
+    void readGitBranch(activeFilePath)
+      .then((branch) => {
+        if (!cancelled) setGitBranch(branch);
+      })
+      .catch(() => {
+        if (!cancelled) setGitBranch(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeFilePath]);
+
+  useEffect(() => {
+    const openSettings = () => setSettingsOpen(true);
+    window.addEventListener('qedit:open-settings', openSettings);
+
+    return () =>
+      window.removeEventListener('qedit:open-settings', openSettings);
+  }, []);
 
   const fileName = activeFilePath?.split('/').pop() ?? 'No file open';
   const displayPath = activeFilePath ?? 'Open a file to begin';
@@ -39,22 +71,22 @@ export function StatusBar() {
               : 'Saved';
   const stateClass =
     state === 'Error' || state === 'Save failed'
-      ? 'text-destructive'
+      ? 'text-danger'
       : state === 'Unsaved' || state === 'Saving...' || state === 'Loading...'
-        ? 'text-amber-500'
-        : 'text-emerald-500';
+        ? 'text-warning'
+        : 'text-success';
 
   return (
-    <div className="flex h-7 select-none items-center justify-between gap-3 border-t bg-muted px-3 text-xs text-muted-foreground">
+    <div className="flex h-statusbar select-none items-center justify-between gap-3 border-t border-border-default bg-statusbar px-3 text-xs text-text-secondary">
       <div className="flex min-w-0 items-center gap-3">
         <span className="flex min-w-0 items-center gap-1.5">
           <span
             className={`inline-block h-2 w-2 shrink-0 rounded-full ${
-              stateClass === 'text-destructive'
-                ? 'bg-destructive'
-                : stateClass === 'text-amber-500'
-                  ? 'bg-amber-500'
-                  : 'bg-emerald-500'
+              stateClass === 'text-danger'
+                ? 'bg-danger'
+                : stateClass === 'text-warning'
+                  ? 'bg-warning'
+                  : 'bg-success'
             }`}
             aria-hidden="true"
           />
@@ -69,7 +101,7 @@ export function StatusBar() {
           <span
             role="alert"
             title={saveError}
-            className="max-w-[40ch] truncate text-destructive"
+            className="max-w-[40ch] truncate text-danger"
           >
             {saveError}
           </span>
@@ -84,15 +116,18 @@ export function StatusBar() {
         <span>{language}</span>
       </div>
       <div className="flex min-w-0 shrink-0 items-center gap-2">
+        <span className="shrink-0 text-text-dimmed">
+          git:{gitBranch ?? '-'}
+        </span>
         <span
-          className="max-w-[30%] truncate text-xs text-muted-foreground/60"
+          className="max-w-[30%] truncate text-xs text-text-dimmed"
           title={activeFilePath ?? undefined}
         >
           {displayPath}
         </span>
         <button
           type="button"
-          className="rounded p-1 text-muted-foreground hover:bg-background hover:text-foreground"
+          className="rounded p-1 text-text-secondary hover:bg-editor hover:text-text-primary"
           onClick={() => setSettingsOpen(true)}
           aria-label="Open preferences"
           title="Preferences"

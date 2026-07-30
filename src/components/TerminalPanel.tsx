@@ -10,6 +10,8 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { useSettingsOrDefault } from './SettingsContext';
 import { useWorkspace } from './WorkspaceContext';
 
+import { withThemeTokens } from '#/lib/design-tokens';
+import type { TokenTheme } from '#/lib/design-tokens';
 import {
   closeTerminal,
   listenTerminalExit,
@@ -31,43 +33,97 @@ type TerminalEvent =
   | { kind: 'output'; data: string }
   | { kind: 'exit'; code: number | null };
 
-function terminalTheme(theme: 'light' | 'dark') {
-  return theme === 'dark'
-    ? {
-        background: '#17181c',
-        foreground: '#d5d8e0',
-        cursor: '#c6a0f6',
-        selectionBackground: '#343842',
-        black: '#17181c',
-        red: '#e78284',
-        green: '#a6d189',
-        yellow: '#e5c890',
-        blue: '#8caaee',
-        magenta: '#ca9ee6',
-        cyan: '#81c8be',
-        white: '#d5d8e0',
-        brightBlack: '#626875',
-        brightWhite: '#f0f1f3',
-      }
-    : {
-        background: '#fbfbfc',
-        foreground: '#30333b',
-        cursor: '#7c3aed',
-        selectionBackground: '#ddd8eb',
-        black: '#30333b',
-        red: '#b42318',
-        green: '#3f7d37',
-        yellow: '#9a6700',
-        blue: '#2f5f9e',
-        magenta: '#7c3aed',
-        cyan: '#267d7b',
-        white: '#fbfbfc',
-        brightBlack: '#7b8190',
-        brightWhite: '#ffffff',
-      };
+const TERMINAL_FALLBACKS: Record<TokenTheme, Record<string, string>> = {
+  dark: {
+    '--qedit-bg-editor': '#303040',
+    '--qedit-text-primary': '#d4d4d4',
+    '--qedit-text-accent': '#70a0ff',
+    '--qedit-bg-selection': '#2050c0',
+    '--qedit-ansi-black': '#1a1a24',
+    '--qedit-ansi-red': '#f07178',
+    '--qedit-ansi-green': '#98c379',
+    '--qedit-ansi-yellow': '#e5c07b',
+    '--qedit-ansi-blue': '#569cd6',
+    '--qedit-ansi-magenta': '#c586c0',
+    '--qedit-ansi-cyan': '#4ec9b0',
+    '--qedit-ansi-white': '#d4d4d4',
+    '--qedit-ansi-bright-black': '#808080',
+    '--qedit-ansi-bright-red': '#ff8b92',
+    '--qedit-ansi-bright-green': '#b5e890',
+    '--qedit-ansi-bright-yellow': '#ffd894',
+    '--qedit-ansi-bright-blue': '#7cb8f0',
+    '--qedit-ansi-bright-magenta': '#dda0d8',
+    '--qedit-ansi-bright-cyan': '#6fe3c9',
+    '--qedit-ansi-bright-white': '#ffffff',
+  },
+  light: {
+    '--qedit-bg-editor': '#ffffff',
+    '--qedit-text-primary': '#1f1f28',
+    '--qedit-text-accent': '#1a56c4',
+    '--qedit-bg-selection': '#add6ff',
+    '--qedit-ansi-black': '#24242e',
+    '--qedit-ansi-red': '#c7262f',
+    '--qedit-ansi-green': '#237d31',
+    '--qedit-ansi-yellow': '#8a6100',
+    '--qedit-ansi-blue': '#0f4ecc',
+    '--qedit-ansi-magenta': '#9b2fae',
+    '--qedit-ansi-cyan': '#0e6f78',
+    '--qedit-ansi-white': '#55555f',
+    '--qedit-ansi-bright-black': '#6b6b80',
+    '--qedit-ansi-bright-red': '#a81f27',
+    '--qedit-ansi-bright-green': '#1a6626',
+    '--qedit-ansi-bright-yellow': '#6d4d00',
+    '--qedit-ansi-bright-blue': '#0a3ea8',
+    '--qedit-ansi-bright-magenta': '#7d2490',
+    '--qedit-ansi-bright-cyan': '#0a5a62',
+    '--qedit-ansi-bright-white': '#8a8a99',
+  },
+};
+
+/**
+ * ANSI slots are absolute ink, not UI surfaces: a shell that asks for color 0
+ * or bright white means those colors whatever the theme is. They therefore read
+ * dedicated `--qedit-ansi-*` tokens, so neither palette can invert them into
+ * background-on-background.
+ */
+function terminalTheme(theme: TokenTheme) {
+  const fallbacks = TERMINAL_FALLBACKS[theme];
+
+  return withThemeTokens(theme, (read) => {
+    const token = (name: string) => read(name, fallbacks[name] ?? '#000000');
+
+    return {
+      background: token('--qedit-bg-editor'),
+      foreground: token('--qedit-text-primary'),
+      cursor: token('--qedit-text-accent'),
+      selectionBackground: token('--qedit-bg-selection'),
+      black: token('--qedit-ansi-black'),
+      red: token('--qedit-ansi-red'),
+      green: token('--qedit-ansi-green'),
+      yellow: token('--qedit-ansi-yellow'),
+      blue: token('--qedit-ansi-blue'),
+      magenta: token('--qedit-ansi-magenta'),
+      cyan: token('--qedit-ansi-cyan'),
+      white: token('--qedit-ansi-white'),
+      brightBlack: token('--qedit-ansi-bright-black'),
+      brightRed: token('--qedit-ansi-bright-red'),
+      brightGreen: token('--qedit-ansi-bright-green'),
+      brightYellow: token('--qedit-ansi-bright-yellow'),
+      brightBlue: token('--qedit-ansi-bright-blue'),
+      brightMagenta: token('--qedit-ansi-bright-magenta'),
+      brightCyan: token('--qedit-ansi-bright-cyan'),
+      brightWhite: token('--qedit-ansi-bright-white'),
+    };
+  });
 }
 
-export function TerminalPanel() {
+/**
+ * The panel stays mounted while hidden. Unmounting it would tear down every
+ * PTY session along with its tabs, names, and scrollback, so visibility is a
+ * presentation concern only - hiding just collapses the panel and parks every
+ * terminal as inactive so it is refit and refocused on the way back.
+ */
+export function TerminalPanel({ visible = true }: { visible?: boolean }) {
   const { workspaceRoot } = useWorkspace();
   const [state, dispatch] = useReducer(
     terminalTabsReducer,
@@ -160,6 +216,7 @@ export function TerminalPanel() {
   useEffect(() => {
     const handleNext = () => navigateTerminal('next');
     const handlePrevious = () => navigateTerminal('previous');
+    const handleNew = () => addTerminal();
     const handleClose = () => {
       if (state.activeId) closeTerminalTab(state.activeId);
     };
@@ -170,16 +227,24 @@ export function TerminalPanel() {
 
     window.addEventListener('qedit:terminal-next', handleNext);
     window.addEventListener('qedit:terminal-previous', handlePrevious);
+    window.addEventListener('qedit:terminal-new', handleNew);
     window.addEventListener('qedit:terminal-close', handleClose);
     window.addEventListener('qedit:terminal-tab', handleIndex);
 
     return () => {
       window.removeEventListener('qedit:terminal-next', handleNext);
       window.removeEventListener('qedit:terminal-previous', handlePrevious);
+      window.removeEventListener('qedit:terminal-new', handleNew);
       window.removeEventListener('qedit:terminal-close', handleClose);
       window.removeEventListener('qedit:terminal-tab', handleIndex);
     };
-  }, [closeTerminalTab, navigateTerminal, selectTerminalIndex, state.activeId]);
+  }, [
+    addTerminal,
+    closeTerminalTab,
+    navigateTerminal,
+    selectTerminalIndex,
+    state.activeId,
+  ]);
 
   const beginRename = useCallback((tab: TerminalTabState) => {
     renameCancelledRef.current = false;
@@ -212,11 +277,14 @@ export function TerminalPanel() {
 
   return (
     <section
-      className="flex h-52 min-h-0 flex-col border-t bg-card"
+      className={`h-52 min-h-0 flex-col border-t border-border-default bg-editor ${
+        visible ? 'flex' : 'hidden'
+      }`}
       aria-label="Terminal panel"
+      aria-hidden={!visible}
     >
-      <div className="flex h-9 shrink-0 items-stretch border-b text-xs font-medium text-muted-foreground">
-        <div className="flex shrink-0 items-center gap-2 border-r px-3">
+      <div className="flex h-tab shrink-0 items-stretch border-b border-border-subtle text-xs font-medium text-text-secondary">
+        <div className="flex shrink-0 items-center gap-2 border-r border-border-subtle px-3">
           <TerminalIcon className="h-3.5 w-3.5" />
           <span>Terminal</span>
         </div>
@@ -274,7 +342,7 @@ export function TerminalPanel() {
         </div>
         <button
           type="button"
-          className="flex shrink-0 items-center gap-1.5 border-l px-3 text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="flex shrink-0 items-center gap-1.5 border-l border-border-subtle px-3 text-text-secondary hover:bg-hover hover:text-text-primary"
           onClick={addTerminal}
           aria-label="New terminal"
           title="New terminal"
@@ -283,10 +351,10 @@ export function TerminalPanel() {
           <span>New Terminal</span>
         </button>
       </div>
-      <div className="flex h-5 shrink-0 items-center gap-2 px-3 text-[10px] text-muted-foreground/70">
+      <div className="flex h-5 shrink-0 items-center gap-2 px-3 text-[10px] text-text-dimmed">
         {activeTab && <span>{statusLabel(activeTab.status)}</span>}
         {activeTab?.error && (
-          <span className="flex min-w-0 items-center gap-1 text-destructive">
+          <span className="flex min-w-0 items-center gap-1 text-danger">
             <AlertCircle className="h-3 w-3" />
             <span className="truncate">{activeTab.error}</span>
           </span>
@@ -305,7 +373,7 @@ export function TerminalPanel() {
           <TerminalInstance
             key={tab.id}
             id={tab.id}
-            isActive={tab.id === state.activeId}
+            isActive={visible && tab.id === state.activeId}
             workspaceRoot={workspaceRoot}
             onStatus={setStatus}
             onOutput={markActivity}
@@ -371,12 +439,12 @@ function TerminalTab({
 
   const statusClass =
     tab.status === 'error'
-      ? 'text-destructive'
+      ? 'text-danger'
       : tab.status === 'exited'
-        ? 'text-muted-foreground/60'
+        ? 'text-text-dimmed'
         : tab.status === 'running'
-          ? 'text-emerald-500'
-          : 'text-amber-500';
+          ? 'text-success'
+          : 'text-warning';
 
   return (
     <div
@@ -385,8 +453,8 @@ function TerminalTab({
       data-terminal-tab={tab.id}
       className={`group flex h-full min-w-28 max-w-56 shrink-0 cursor-pointer items-center gap-1.5 border-r px-2.5 text-[11px] transition-colors ${
         isActive
-          ? 'border-t-2 border-t-primary bg-background text-foreground'
-          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          ? 'border-t-2 border-t-accent bg-tab-active text-text-primary'
+          : 'text-text-secondary hover:bg-hover hover:text-text-primary'
       }`}
       onClick={onSelect}
       onDoubleClick={(event) => {
@@ -441,7 +509,7 @@ function TerminalTab({
       <Circle className={`h-2 w-2 shrink-0 fill-current ${statusClass}`} />
       {tab.isDirty && (
         <span
-          className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-300"
+          className="h-1.5 w-1.5 shrink-0 rounded-full bg-text-accent"
           aria-label="Unread output"
         />
       )}
@@ -462,7 +530,7 @@ function TerminalTab({
             }
           }}
           onBlur={onRenameCommit}
-          className="min-w-0 flex-1 rounded border border-primary/60 bg-background px-1 text-[11px] text-foreground outline-none"
+          className="min-w-0 flex-1 rounded border border-focus bg-input-shell px-1 text-[11px] text-text-primary outline-none"
           aria-label={`Rename ${tab.name}`}
         />
       ) : (
@@ -473,7 +541,7 @@ function TerminalTab({
           <span className="sr-only">Close </span>
           <button
             type="button"
-            className="rounded p-0.5 hover:bg-muted"
+            className="rounded p-0.5 hover:bg-hover"
             onClick={(event) => {
               event.stopPropagation();
               onClose();

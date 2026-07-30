@@ -23,6 +23,8 @@ export type ShortcutAction =
   | 'focus-terminal'
   | 'focus-editor'
   | 'quick-open'
+  | 'command-palette'
+  | 'toggle-sidebar'
   | 'find';
 
 /**
@@ -120,7 +122,8 @@ export function shortcutActionForEvent(
   if (key === 'pageup' || (key === 'tab' && event.shiftKey)) {
     return 'previous-tab';
   }
-  if (key === 'p') return 'quick-open';
+  if (key === 'p') return event.shiftKey ? 'command-palette' : 'quick-open';
+  if (key === 'b') return 'toggle-sidebar';
   if (key === 'f') return 'find';
 
   return null;

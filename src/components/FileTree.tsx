@@ -55,16 +55,18 @@ export function FileTree() {
   );
 
   return (
-    <aside className="flex h-full min-h-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
-      <div className="flex h-9 items-center justify-between border-b border-sidebar-border px-3">
+    <aside className="flex h-full min-h-0 flex-col border-r border-border-subtle bg-sidebar text-sidebar-foreground">
+      <div className="flex h-tab items-center justify-between border-b border-border-subtle px-3">
         <div className="flex min-w-0 items-center gap-2">
-          <Home className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <span className="truncate text-xs font-medium">Explorer</span>
+          <Home className="h-3.5 w-3.5 shrink-0 text-text-secondary" />
+          <span className="truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-text-primary">
+            Explorer
+          </span>
         </div>
         <div className="flex items-center gap-0.5">
           <button
             type="button"
-            className="rounded p-1 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            className="rounded p-1 text-text-secondary hover:bg-hover hover:text-text-primary"
             onClick={() => void openFileDialog()}
             aria-label="Open file"
             title="Open File (Cmd/Ctrl+O)"
@@ -73,7 +75,7 @@ export function FileTree() {
           </button>
           <button
             type="button"
-            className="rounded p-1 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            className="rounded p-1 text-text-secondary hover:bg-hover hover:text-text-primary"
             onClick={() => void createFile()}
             aria-label="New file"
             title="New File in Workspace"
@@ -82,7 +84,7 @@ export function FileTree() {
           </button>
           <button
             type="button"
-            className="rounded p-1 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            className="rounded p-1 text-text-secondary hover:bg-hover hover:text-text-primary"
             onClick={() => window.dispatchEvent(new Event('qedit:quick-open'))}
             aria-label="Search files"
             title="Search Files (Cmd/Ctrl+P)"
@@ -91,7 +93,7 @@ export function FileTree() {
           </button>
           <button
             type="button"
-            className="rounded p-1 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            className="rounded p-1 text-text-secondary hover:bg-hover hover:text-text-primary"
             onClick={() => void openFolderDialog()}
             aria-label="Open folder"
             title="Open Folder or Project (Cmd/Ctrl+Shift+O)"
@@ -121,26 +123,24 @@ export function FileTree() {
           </div>
         )}
 
-        <section className="border-b border-sidebar-border px-2 py-2">
-          <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <section className="border-b border-border-subtle px-2 py-2">
+          <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
             <Clock className="h-3 w-3" />
             Recent
           </div>
           {recentProjects.length === 0 && recentFiles.length === 0 ? (
-            <p className="px-1 text-xs text-muted-foreground/60">
-              No recent items
-            </p>
+            <p className="px-1 text-xs text-text-dimmed">No recent items</p>
           ) : (
             <div className="space-y-0.5">
               {recentProjects.slice(0, 5).map((project) => (
                 <button
                   key={project.projectPath}
                   type="button"
-                  className="flex w-full min-w-0 items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                  className="flex w-full min-w-0 items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs text-text-secondary hover:bg-hover hover:text-text-primary"
                   onClick={() => void openRecentProject(project.projectPath)}
                   title={project.projectPath}
                 >
-                  <Folder className="h-3 w-3 shrink-0 text-amber-500" />
+                  <Folder className="h-3 w-3 shrink-0 text-syntax-number" />
                   <span className="truncate">{project.displayName}</span>
                 </button>
               ))}
@@ -150,15 +150,15 @@ export function FileTree() {
                   type="button"
                   className={`flex w-full min-w-0 items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs hover:bg-sidebar-accent ${
                     activeFilePath === file.filePath
-                      ? 'bg-sidebar-accent text-sidebar-foreground'
-                      : 'text-sidebar-foreground/70'
+                      ? 'bg-hover text-text-primary'
+                      : 'text-text-secondary'
                   }`}
                   onClick={() =>
                     handleOpenFile(file.filePath, file.displayName)
                   }
                   title={file.filePath}
                 >
-                  <File className="h-3 w-3 shrink-0 text-blue-500" />
+                  <File className="h-3 w-3 shrink-0 text-syntax-variable" />
                   <span className="truncate">{file.displayName}</span>
                 </button>
               ))}
@@ -167,16 +167,16 @@ export function FileTree() {
         </section>
 
         <section className="min-h-0">
-          <div className="flex items-center gap-1 border-b border-sidebar-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/60">
+          <div className="flex items-center gap-1 border-b border-border-subtle px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
             {workspaceRoot ? (
               <>
-                <FolderOpen className="h-3 w-3 text-amber-500" />
+                <FolderOpen className="h-3 w-3 text-syntax-number" />
                 <span className="truncate" title={workspaceRoot}>
                   {basenameFromPath(workspaceRoot)}
                 </span>
                 <button
                   type="button"
-                  className="ml-auto rounded p-1 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                  className="ml-auto rounded p-1 text-text-secondary hover:bg-hover hover:text-text-primary"
                   onClick={() => void refreshWorkspace()}
                   aria-label="Refresh workspace"
                   title="Refresh Workspace"
@@ -185,15 +185,15 @@ export function FileTree() {
                 </button>
               </>
             ) : (
-              <span>Workspace</span>
+              <span>FOLDERS</span>
             )}
           </div>
           {!workspaceRoot ? (
-            <div className="space-y-2 px-3 py-3 text-xs text-muted-foreground">
+            <div className="space-y-2 px-3 py-3 text-xs text-text-secondary">
               <p>Open a folder to browse its files.</p>
               <button
                 type="button"
-                className="inline-flex items-center gap-1.5 rounded border px-2 py-1.5 font-medium text-foreground hover:bg-muted"
+                className="inline-flex items-center gap-1.5 rounded border border-border-default px-2 py-1.5 font-medium text-text-primary hover:bg-hover"
                 onClick={() => void openFolderDialog()}
               >
                 <FolderPlus className="h-3.5 w-3.5" />
@@ -201,11 +201,11 @@ export function FileTree() {
               </button>
             </div>
           ) : loading ? (
-            <p className="px-3 py-3 text-xs text-muted-foreground">
+            <p className="px-3 py-3 text-xs text-text-secondary">
               Loading workspace...
             </p>
           ) : rootEntries.length === 0 && !error ? (
-            <p className="px-3 py-3 text-xs text-muted-foreground">
+            <p className="px-3 py-3 text-xs text-text-secondary">
               No visible files in this folder.
             </p>
           ) : (
@@ -315,8 +315,8 @@ function TreeNode({
   return (
     <div>
       <div
-        className={`group flex cursor-pointer items-center gap-1 px-2 py-1 text-xs transition-colors hover:bg-muted ${
-          isActive ? 'bg-muted text-foreground' : 'text-muted-foreground'
+        className={`group flex cursor-pointer items-center gap-1 px-2 py-1 text-xs transition-colors hover:bg-hover ${
+          isActive ? 'bg-hover text-text-primary' : 'text-text-secondary'
         }`}
         style={{ paddingLeft: `${paddingLeft}px` }}
         onClick={() => void handleToggle()}
@@ -342,22 +342,22 @@ function TreeNode({
         )}
         {entry.isDirectory ? (
           expanded ? (
-            <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+            <FolderOpen className="h-3.5 w-3.5 shrink-0 text-syntax-number" />
           ) : (
-            <Folder className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+            <Folder className="h-3.5 w-3.5 shrink-0 text-syntax-number" />
           )
         ) : (
-          <File className="h-3.5 w-3.5 shrink-0 text-blue-500" />
+          <File className="h-3.5 w-3.5 shrink-0 text-syntax-variable" />
         )}
         <span className="min-w-0 truncate">{entry.name}</span>
         {loadingChildren && (
-          <span className="ml-auto text-[10px] text-muted-foreground">...</span>
+          <span className="ml-auto text-[10px] text-text-muted">...</span>
         )}
         {entry.isFile && (
           <span className="ml-auto hidden items-center gap-0.5 group-hover:flex group-focus-within:flex">
             <button
               type="button"
-              className="rounded p-0.5 hover:bg-muted-foreground/20"
+              className="rounded p-0.5 hover:bg-hover"
               onClick={(event) => {
                 event.stopPropagation();
                 onRename(entry.path);
@@ -369,7 +369,7 @@ function TreeNode({
             </button>
             <button
               type="button"
-              className="rounded p-0.5 text-destructive hover:bg-destructive/10"
+              className="rounded p-0.5 text-danger hover:bg-danger/10"
               onClick={(event) => {
                 event.stopPropagation();
                 onDelete(entry.path);
@@ -387,7 +387,7 @@ function TreeNode({
           {loadError ? (
             <button
               type="button"
-              className="ml-8 flex items-center gap-1 px-2 py-1 text-left text-[11px] text-destructive hover:underline"
+              className="ml-8 flex items-center gap-1 px-2 py-1 text-left text-[11px] text-danger hover:underline"
               onClick={() => void loadChildren()}
             >
               <RefreshCw className="h-3 w-3" />
@@ -395,7 +395,7 @@ function TreeNode({
             </button>
           ) : children?.length === 0 ? (
             <p
-              className="px-2 py-1 text-[11px] text-muted-foreground"
+              className="px-2 py-1 text-[11px] text-text-secondary"
               style={{ paddingLeft: `${paddingLeft + 32}px` }}
             >
               Empty folder
