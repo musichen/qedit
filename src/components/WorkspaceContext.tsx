@@ -13,6 +13,7 @@ import type { ReactNode } from 'react';
 
 import { useEditor } from './EditorContext';
 
+import { logError, logInfo } from '#/lib/app-logging';
 import {
   basenameFromPath,
   errorMessage,
@@ -141,11 +142,17 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const openFolderDialog = useCallback(async () => {
     setError(null);
+    void logInfo('open-folder flow started (local-only diagnostics)');
 
     try {
       const selected = await openNativeFolder();
 
-      if (!selected) return;
+      if (!selected) {
+        void logInfo('open-folder flow cancelled');
+        return;
+      }
+
+      void logInfo(`open-folder selected path=${selected}`);
 
       // Validate the new workspace before closing the current tabs. A stale,
       // unreadable, or rejected folder must never destroy the user's buffers.
@@ -153,9 +160,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       if (!closeAllTabs()) return;
 
       loadWorkspace(selected, entries);
+      window.dispatchEvent(new Event('qedit:open-sidebar'));
+      void logInfo(
+        `open-folder flow succeeded path=${selected} entries=${entries.length}`,
+      );
       db.addRecentProject(selected, basenameFromPath(selected));
       refreshRecent();
     } catch (cause) {
+      void logError('open-folder flow failed', cause);
       setError(errorMessage(cause));
     }
   }, [closeAllTabs, loadWorkspace, refreshRecent]);
@@ -187,6 +199,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         if (!closeAllTabs()) return;
 
         loadWorkspace(projectPath, entries);
+        window.dispatchEvent(new Event('qedit:open-sidebar'));
         db.addRecentProject(projectPath, basenameFromPath(projectPath));
         refreshRecent();
       } catch (cause) {

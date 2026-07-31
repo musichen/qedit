@@ -56,6 +56,7 @@
     "@tauri-apps/api": "catalog:",
     "@tauri-apps/plugin-dialog": "catalog:",
     "@tauri-apps/plugin-fs": "catalog:",
+    "@tauri-apps/plugin-log": "catalog:",
     "@tauri-apps/plugin-shell": "catalog:",
     "@tauri-apps/plugin-store": "catalog:",
     "@xterm/addon-fit": "catalog:",

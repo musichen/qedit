@@ -111,6 +111,24 @@ describe('WorkspaceContext', () => {
     expect(workspace.error).toContain('folder is gone');
   });
 
+  it('requests the sidebar to open when a folder becomes the workspace', async () => {
+    const openSidebar = vi.fn();
+    window.addEventListener('qedit:open-sidebar', openSidebar);
+    openNativeFolder.mockResolvedValue('/home/project');
+    readWorkspaceDirectory.mockResolvedValue([file('/home/project/main.md')]);
+
+    try {
+      renderWorkspace();
+      await act(async () => {
+        await workspace.openFolderDialog();
+      });
+
+      expect(openSidebar).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener('qedit:open-sidebar', openSidebar);
+    }
+  });
+
   it('ignores a folder expansion that belongs to a previous workspace', async () => {
     openNativeFolder.mockResolvedValue('/home/second');
     readWorkspaceDirectory.mockResolvedValue([file('/home/second/main.ts')]);

@@ -5,6 +5,8 @@ import type { DragEvent } from 'react';
 import { useEditor } from './EditorContext';
 import type { OpenTab } from './EditorContext';
 
+import { logInfo } from '#/lib/app-logging';
+
 export function TabBar({
   onOpenTerminal,
   terminalVisible = false,
@@ -34,6 +36,7 @@ export function TabBar({
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
     setTerminalDropActive(false);
+    void logInfo('terminal action dropped into file tab bar');
     onDropTerminal?.();
   };
 
@@ -107,6 +110,7 @@ export function TabBar({
         onDragStart={(event) => {
           event.dataTransfer.effectAllowed = 'move';
           event.dataTransfer.setData('text/qedit-terminal', 'active');
+          void logInfo('terminal action drag started from file tab bar');
         }}
         aria-label="Open Terminal"
         aria-pressed={terminalVisible || terminalEditorVisible}

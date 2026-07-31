@@ -248,6 +248,7 @@ export const MENU_DATA: MenuDefinition[] = [
       { label: 'Release Notes', action: 'help.releaseNotes' },
       separator(),
       { label: 'Report an Issue', action: 'help.reportIssue' },
+      { label: 'Open Local Logs Folder', action: 'help.openLogs' },
       { label: 'View License', action: 'help.license' },
       { label: 'Check for Updates…', action: 'help.updates' },
     ],
