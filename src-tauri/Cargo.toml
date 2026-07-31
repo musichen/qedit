@@ -1,6 +1,6 @@
 [package]
 name = "qedit"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 description = "A lightweight Tauri 2 desktop file editor with Monaco and integrated terminal"
 authors = ["Alex Musichen <alex.musichen@gmail.com>"]
