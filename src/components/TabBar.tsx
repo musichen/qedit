@@ -6,18 +6,25 @@ import { useEditor } from './EditorContext';
 import type { OpenTab } from './EditorContext';
 
 import { logInfo } from '#/lib/app-logging';
+import {
+  getTerminalDragId,
+  isTerminalDragOver,
+  setTerminalDragData,
+} from '#/lib/terminal-drag';
 
 export function TabBar({
   onOpenTerminal,
+  onOpenTerminalEditor,
   terminalVisible = false,
   terminalEditorVisible = false,
   onDropTerminal,
   onCloseTerminalEditor,
 }: {
   onOpenTerminal?: () => void;
+  onOpenTerminalEditor?: () => void;
   terminalVisible?: boolean;
   terminalEditorVisible?: boolean;
-  onDropTerminal?: () => void;
+  onDropTerminal?: (terminalId: string) => void;
   onCloseTerminalEditor?: () => void;
 }) {
   const {
@@ -31,13 +38,13 @@ export function TabBar({
   const [terminalDropActive, setTerminalDropActive] = useState(false);
 
   const handleTerminalDrop = (event: DragEvent) => {
-    if (!event.dataTransfer.types.includes('text/qedit-terminal')) return;
-
+    const terminalId = getTerminalDragId(event.dataTransfer);
+    if (!terminalId) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
     setTerminalDropActive(false);
     void logInfo('terminal action dropped into file tab bar');
-    onDropTerminal?.();
+    onDropTerminal?.(terminalId);
   };
 
   const navigateTab = (index: number) => {
@@ -58,7 +65,7 @@ export function TabBar({
         role="tablist"
         aria-label="Open files"
         onDragOver={(event) => {
-          if (!event.dataTransfer.types.includes('text/qedit-terminal')) return;
+          if (!isTerminalDragOver(event.dataTransfer)) return;
           event.preventDefault();
           event.dataTransfer.dropEffect = 'move';
           setTerminalDropActive(true);
@@ -66,7 +73,7 @@ export function TabBar({
         onDragLeave={() => setTerminalDropActive(false)}
         onDrop={handleTerminalDrop}
       >
-        {openTabs.length === 0 ? (
+        {openTabs.length === 0 && !terminalEditorVisible ? (
           <span className="flex min-w-0 flex-1 items-center px-4 text-xs text-text-muted">
             No open files
           </span>
@@ -97,6 +104,12 @@ export function TabBar({
             />
           ))
         )}
+        {terminalEditorVisible && (
+          <TerminalEditorTab
+            onSelect={onOpenTerminalEditor}
+            onClose={onCloseTerminalEditor}
+          />
+        )}
       </div>
       <button
         type="button"
@@ -109,36 +122,30 @@ export function TabBar({
         onClick={onOpenTerminal}
         onDragStart={(event) => {
           event.dataTransfer.effectAllowed = 'move';
-          event.dataTransfer.setData('text/qedit-terminal', 'active');
+          setTerminalDragData(event.dataTransfer, 'active');
           void logInfo('terminal action drag started from file tab bar');
         }}
         aria-label="Open Terminal"
         aria-pressed={terminalVisible || terminalEditorVisible}
-        title="Open Terminal (drag into the tab bar to pin)"
+        title="Open Terminal panel (Ctrl+Shift+`; drag into the file tabs to pin)"
       >
         <TerminalIcon className="h-3.5 w-3.5" />
         <span>Terminal</span>
-        {terminalEditorVisible && (
-          <span
-            role="button"
-            tabIndex={0}
-            className="ml-1 rounded p-0.5 hover:bg-hover"
-            onClick={(event) => {
-              event.stopPropagation();
-              onCloseTerminalEditor?.();
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                event.stopPropagation();
-                onCloseTerminalEditor?.();
-              }
-            }}
-            aria-label="Close terminal editor tab"
-          >
-            ×
-          </span>
-        )}
+      </button>
+      <button
+        type="button"
+        className={`flex h-full shrink-0 items-center gap-1.5 border-r border-border-subtle px-3 text-xs transition-colors ${
+          terminalEditorVisible
+            ? 'border-t-2 border-t-accent bg-tab-active text-text-primary'
+            : 'text-text-secondary hover:bg-hover hover:text-text-primary'
+        }`}
+        onClick={onOpenTerminalEditor}
+        aria-label="Open Terminal in editor tab"
+        aria-pressed={terminalEditorVisible}
+        title="Open Terminal in editor tab"
+      >
+        <TerminalIcon className="h-3.5 w-3.5" />
+        <span>Editor</span>
       </button>
       <div className="flex shrink-0 items-center gap-0.5 border-l border-border-subtle px-1">
         <button
@@ -152,6 +159,46 @@ export function TabBar({
           <Save className="h-3.5 w-3.5" />
         </button>
       </div>
+    </div>
+  );
+}
+
+function TerminalEditorTab({
+  onSelect,
+  onClose,
+}: {
+  onSelect?: () => void;
+  onClose?: () => void;
+}) {
+  return (
+    <div
+      className="group flex h-full min-w-32 max-w-56 shrink-0 cursor-pointer items-center gap-1.5 border-r border-t-2 border-t-accent bg-tab-active px-3 text-sm text-text-primary"
+      onClick={onSelect}
+      role="tab"
+      aria-label="Terminal editor tab"
+      aria-selected="true"
+      aria-current="page"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onSelect?.();
+        }
+      }}
+    >
+      <TerminalIcon className="h-3.5 w-3.5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">Terminal</span>
+      <button
+        type="button"
+        className="rounded p-0.5 opacity-0 transition-opacity hover:bg-hover group-hover:opacity-100 group-focus-within:opacity-100"
+        onClick={(event) => {
+          event.stopPropagation();
+          onClose?.();
+        }}
+        aria-label="Close terminal editor tab"
+      >
+        <X className="h-3 w-3" />
+      </button>
     </div>
   );
 }
