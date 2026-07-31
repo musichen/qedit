@@ -81,6 +81,12 @@ function EditorLayout() {
   dirtyStateRef.current = { hasDirtyTabs, dirtyTabCount };
 
   useEffect(() => {
+    const openSidebar = () => setSidebarOpen(true);
+    window.addEventListener('qedit:open-sidebar', openSidebar);
+    return () => window.removeEventListener('qedit:open-sidebar', openSidebar);
+  }, []);
+
+  useEffect(() => {
     const panel = terminalPanelRef.current;
     if (!panel) return;
 

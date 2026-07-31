@@ -160,6 +160,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       if (!closeAllTabs()) return;
 
       loadWorkspace(selected, entries);
+      window.dispatchEvent(new Event('qedit:open-sidebar'));
       void logInfo(
         `open-folder flow succeeded path=${selected} entries=${entries.length}`,
       );
@@ -198,6 +199,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         if (!closeAllTabs()) return;
 
         loadWorkspace(projectPath, entries);
+        window.dispatchEvent(new Event('qedit:open-sidebar'));
         db.addRecentProject(projectPath, basenameFromPath(projectPath));
         refreshRecent();
       } catch (cause) {

@@ -8,6 +8,7 @@ import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 
 import { withThemeTokens } from './design-tokens';
 import type { TokenReader, TokenTheme } from './design-tokens';
+import { toMonacoTokenColor } from './monaco-colors';
 import { MONACO_THEMES } from './monaco-themes';
 
 declare global {
@@ -116,7 +117,8 @@ function qeditTheme(theme: TokenTheme): monaco.editor.IStandaloneThemeData {
 
   return withThemeTokens(theme, (read: TokenReader) => {
     const token = (name: string) => read(name, fallbacks[name] ?? '#000000');
-    const ruleColor = (name: string) => token(name).replace(/^#/, '');
+    const ruleColor = (name: string) =>
+      toMonacoTokenColor(token(name), fallbacks[name]);
     const editorBackground = token('--qedit-bg-editor');
     const editorForeground = token('--qedit-text-primary');
     const muted = token('--qedit-text-muted');
@@ -141,7 +143,13 @@ function qeditTheme(theme: TokenTheme): monaco.editor.IStandaloneThemeData {
         { token: 'type', foreground: ruleColor('--qedit-syntax-type') },
         { token: 'function', foreground: ruleColor('--qedit-syntax-function') },
         { token: 'variable', foreground: ruleColor('--qedit-syntax-variable') },
-        { token: 'identifier', foreground: editorForeground.replace('#', '') },
+        {
+          token: 'identifier',
+          foreground: toMonacoTokenColor(
+            editorForeground,
+            fallbacks['--qedit-text-primary'],
+          ),
+        },
       ],
       colors: {
         'editor.background': editorBackground,
