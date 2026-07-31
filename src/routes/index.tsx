@@ -167,6 +167,7 @@ function EditorLayout() {
 
       if (/^terminal-[1-9]$/.test(action)) {
         setTerminalVisible(true);
+        setTerminalEditorVisible(false);
         window.dispatchEvent(
           new CustomEvent('qedit:terminal-tab', {
             detail: Number(action.slice('terminal-'.length)) - 1,
@@ -226,16 +227,19 @@ function EditorLayout() {
           break;
         case 'next-terminal':
           setTerminalVisible(true);
+          setTerminalEditorVisible(false);
           window.dispatchEvent(new Event('qedit:terminal-next'));
           break;
         case 'previous-terminal':
           setTerminalVisible(true);
+          setTerminalEditorVisible(false);
           window.dispatchEvent(new Event('qedit:terminal-previous'));
           break;
         case 'focus-terminal':
           // Revealing the panel makes its active terminal focus itself, so the
           // chord works the same whether or not the panel was already open.
           setTerminalVisible(true);
+          setTerminalEditorVisible(false);
           window.dispatchEvent(new Event('qedit:focus-terminal'));
           break;
         case 'focus-editor':
@@ -310,6 +314,7 @@ function EditorLayout() {
           break;
         case 'view.toggleTerminal':
           setTerminalVisible((visible) => !visible);
+          setTerminalEditorVisible(false);
           break;
         case 'view.commandPalette':
           setCommandPaletteVisible(true);
@@ -337,10 +342,12 @@ function EditorLayout() {
           break;
         case 'terminal.new':
           setTerminalVisible(true);
+          setTerminalEditorVisible(false);
           window.dispatchEvent(new Event('qedit:terminal-new'));
           break;
         case 'terminal.focus':
           setTerminalVisible(true);
+          setTerminalEditorVisible(false);
           window.dispatchEvent(new Event('qedit:focus-terminal'));
           break;
         case 'terminal.next':
