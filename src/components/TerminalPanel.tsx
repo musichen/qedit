@@ -10,6 +10,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { useSettingsOrDefault } from './SettingsContext';
 import { useWorkspace } from './WorkspaceContext';
 
+import { logInfo } from '#/lib/app-logging';
 import { withThemeTokens } from '#/lib/design-tokens';
 import type { TokenTheme } from '#/lib/design-tokens';
 import {
@@ -164,6 +165,7 @@ export function TerminalPanel({
   const addTerminal = useCallback(() => {
     const number = nextNumberRef.current++;
     const id = `terminal-${number}`;
+    void logInfo(`terminal tab created id=${id}`);
 
     dispatch({
       type: 'add',
@@ -178,10 +180,12 @@ export function TerminalPanel({
   }, []);
 
   const selectTerminal = useCallback((id: string) => {
+    void logInfo(`terminal tab activated id=${id}`);
     dispatch({ type: 'activate', id });
   }, []);
 
   const closeTerminalTab = useCallback((id: string) => {
+    void logInfo(`terminal tab closed id=${id}`);
     setRenamingId((current) => (current === id ? null : current));
     dispatch({ type: 'close', id });
   }, []);
@@ -487,6 +491,7 @@ function TerminalTab({
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = 'move';
         event.dataTransfer.setData('text/qedit-terminal', tab.id);
+        void logInfo(`terminal tab drag started id=${tab.id}`);
       }}
       onDragOver={(event) => {
         event.preventDefault();
@@ -495,7 +500,10 @@ function TerminalTab({
       onDrop={(event) => {
         event.preventDefault();
         const sourceId = event.dataTransfer.getData('text/qedit-terminal');
-        if (sourceId) onDropTab(sourceId);
+        if (sourceId) {
+          void logInfo(`terminal tab drop target=${tab.id} source=${sourceId}`);
+          onDropTab(sourceId);
+        }
       }}
       onKeyDown={(event) => {
         if (event.key === 'F2') {

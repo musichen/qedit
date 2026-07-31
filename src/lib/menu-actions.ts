@@ -7,6 +7,7 @@
 /** Actions handled by the editor shell (`runMenuAction` in the index route). */
 export const SHELL_MENU_ACTIONS: ReadonlySet<string> = new Set([
   'app.preferences',
+  'help.openLogs',
   'file.new',
   'file.open',
   'file.openFolder',

@@ -1,3 +1,5 @@
+import { logError, logInfo } from './app-logging';
+
 export interface WorkspaceEntry {
   name: string;
   path: string;
@@ -92,6 +94,10 @@ async function selectedPath(options: {
   directory: boolean;
   title: string;
 }): Promise<string | null> {
+  void logInfo(
+    `picker attempt kind=${options.directory ? 'folder' : 'file'} title=${options.title}`,
+  );
+
   try {
     const { open } = await import('@tauri-apps/plugin-dialog');
     const result = await open({
@@ -102,10 +108,23 @@ async function selectedPath(options: {
 
     // Some macOS native dialog versions return a one-item array even when
     // `multiple: false`; otherwise Open Folder silently becomes a no-op.
-    if (typeof result === 'string') return result;
+    if (typeof result === 'string') {
+      void logInfo(
+        `picker result kind=${options.directory ? 'folder' : 'file'} path=${result}`,
+      );
+      return result;
+    }
 
-    return result?.[0] ?? null;
+    const selected = result?.[0] ?? null;
+    void logInfo(
+      `picker result kind=${options.directory ? 'folder' : 'file'} path=${selected ?? '<cancelled>'} shape=array`,
+    );
+    return selected;
   } catch (cause) {
+    void logError(
+      `picker error kind=${options.directory ? 'folder' : 'file'}`,
+      cause,
+    );
     throw new WorkspaceBridgeError(
       `Could not open ${options.directory ? 'folder' : 'file'} picker: ${errorMessage(cause)}`,
       { cause },

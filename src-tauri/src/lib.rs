@@ -9,6 +9,7 @@ use std::thread;
 use portable_pty::{native_pty_system, Child, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 use tauri::{Emitter, Manager, RunEvent, Runtime, State};
+use tauri_plugin_log::{Target, TargetKind};
 
 type SharedMaster = Arc<Mutex<Box<dyn MasterPty + Send>>>;
 type SharedWriter = Arc<Mutex<Box<dyn Write + Send>>>;
@@ -535,6 +536,11 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([Target::new(TargetKind::LogDir { file_name: None })])
+                .build(),
+        )
         .manage(Arc::new(Mutex::new(TerminalState::default())) as SharedTerminalState)
         .invoke_handler(tauri::generate_handler![
             terminal_spawn,

@@ -17,6 +17,7 @@ import { StatusBar } from '#/components/StatusBar';
 import { TabBar } from '#/components/TabBar';
 import { TerminalPanel } from '#/components/TerminalPanel';
 import { useWorkspace, WorkspaceProvider } from '#/components/WorkspaceContext';
+import { logInfo, openLocalLogsFolder } from '#/lib/app-logging';
 import { isMenuActionAvailable } from '#/lib/menu-actions';
 import { shortcutActionForEvent } from '#/lib/shortcuts';
 
@@ -278,6 +279,16 @@ function EditorLayout() {
       switch (action) {
         case 'app.preferences':
           window.dispatchEvent(new Event('qedit:open-settings'));
+          break;
+        case 'help.openLogs':
+          void openLocalLogsFolder()
+            .then((path) => {
+              if (path)
+                void logInfo(`logs folder action completed path=${path}`);
+            })
+            .catch((cause: unknown) => {
+              console.warn('Could not open local logs folder:', cause);
+            });
           break;
         case 'file.new':
           void createFile();
