@@ -22,4 +22,30 @@ describe('TabBar terminal action', () => {
     fireEvent.click(terminalButton);
     expect(onOpenTerminal).toHaveBeenCalledTimes(1);
   });
+
+  it('accepts a dragged terminal action in the file tab area', () => {
+    const onDropTerminal = vi.fn();
+
+    render(
+      <EditorProvider>
+        <TabBar onDropTerminal={onDropTerminal} />
+      </EditorProvider>,
+    );
+
+    const terminalButton = screen.getByRole('button', {
+      name: 'Open Terminal',
+    });
+    const fileTabs = screen.getByRole('tablist', { name: 'Open files' });
+    const data = {
+      types: ['text/qedit-terminal'],
+      dropEffect: 'none',
+      getData: () => 'active',
+      setData: () => undefined,
+    } as unknown as DataTransfer;
+
+    fireEvent.dragStart(terminalButton, { dataTransfer: data });
+    fireEvent.drop(fileTabs, { dataTransfer: data });
+
+    expect(onDropTerminal).toHaveBeenCalledTimes(1);
+  });
 });

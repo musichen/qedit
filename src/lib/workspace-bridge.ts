@@ -100,7 +100,11 @@ async function selectedPath(options: {
       multiple: false,
     });
 
-    return typeof result === 'string' ? result : null;
+    // Some macOS native dialog versions return a one-item array even when
+    // `multiple: false`; otherwise Open Folder silently becomes a no-op.
+    if (typeof result === 'string') return result;
+
+    return result?.[0] ?? null;
   } catch (cause) {
     throw new WorkspaceBridgeError(
       `Could not open ${options.directory ? 'folder' : 'file'} picker: ${errorMessage(cause)}`,
