@@ -140,6 +140,13 @@ describe('release pipeline contract', () => {
     expect(releaseBuild).toContain(
       'CI=true NO_AT_BRIDGE=1 pnpm exec tauri build --bundles deb,appimage',
     );
+    const macBuild = readFileSync(
+      join(projectRoot, 'scripts/build-mac.sh'),
+      'utf8',
+    );
+    expect(macBuild).toContain('codesign --sign - --force --deep');
+    expect(macBuild).toContain('pnpm exec tauri build --bundles app');
+    expect(macBuild).toContain('pnpm exec tauri bundle --bundles dmg');
     expect(workflow).not.toContain("QEDIT_REQUIRE_SIGNED: '1'");
     expect(workflow).toContain(
       'dist/release/v${{ steps.version.outputs.version }}/${{ matrix.target }}',
@@ -330,7 +337,7 @@ describe('release pipeline contract', () => {
       );
       expect(prepare.status).toBe(0);
       expect(`${prepare.stdout}${prepare.stderr}`).toContain(
-        'unsigned public preview',
+        'ad-hoc signed public preview',
       );
       writeFileSync(
         manifestPath,

@@ -54,8 +54,18 @@ fi
 if [[ "$TARGET" == macos-* ]]; then
   if ! has_all_values APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; then
     if [[ "${QEDIT_REQUIRE_SIGNING:-}" != 1 ]]; then
-      write_status 'unsigned' 'Apple signing credentials are absent or incomplete'
-      echo "warning: macOS artifacts are unsigned; set QEDIT_REQUIRE_SIGNING=1 to make this a release-blocking error" >&2
+      APP_PATH="$PROJECT_ROOT/src-tauri/target/release/bundle/macos/qedit.app"
+      if [[ -d "$APP_PATH" && -x "$APP_PATH/Contents/MacOS/qedit" ]]; then
+        command -v codesign >/dev/null 2>&1 || { echo 'Error: ad-hoc signing requires codesign' >&2; exit 1; }
+        codesign --sign - --force --deep "$APP_PATH"
+        codesign --verify --deep --strict "$APP_PATH"
+        ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$OUT_DIR/qedit-v${VERSION}-macos-${TARGET##*-}.app.zip"
+        write_status 'unsigned' 'Apple Developer ID credentials are absent or incomplete; app bundle ad-hoc signed (not notarized)'
+        echo "warning: macOS artifacts use an ad-hoc signed app bundle; users may need to right-click Open once, but xattr -cr is not required" >&2
+      else
+        write_status 'unsigned' 'Apple signing credentials are absent or incomplete; app bundle could not be ad-hoc signed'
+        echo "warning: macOS app bundle is unsigned; set QEDIT_REQUIRE_SIGNING=1 to make this a release-blocking error" >&2
+      fi
       exit 0
     fi
     echo "Error: macOS signing is required but credentials are absent or incomplete" >&2

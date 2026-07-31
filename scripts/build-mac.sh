@@ -16,6 +16,7 @@ BUILD_LOG="$(mktemp -t qedit-build-mac.XXXXXXXX)"
 # presentation-independent failure (hdiutil, mount, detach, compression) fails
 # the retry too, and the final DMG assertion below refuses a false success.
 DMG_STAGE_FAILURE_PATTERN='error running bundle_dmg\.sh|Failed running AppleScript|AppleEvent timed out|Not authorized to send Apple events|\(-1712\)|\(-1719\)|\(-1743\)'
+ADHOC_SIGN="${QEDIT_ADHOC_SIGN:-}"
 
 cleanup_dmg_temps() {
   if [[ -d "$BUNDLE_DIR" ]]; then
@@ -33,7 +34,23 @@ cleanup_dmg_temps
 
 run_bundler() {
   local status=0
-  if [[ "${1:-}" == "degraded" ]]; then
+  if [[ -n "$ADHOC_SIGN" ]]; then
+    # Build the app separately so the signed bundle is what the DMG contains.
+    pnpm exec tauri build --bundles app 2>&1 | tee "$BUILD_LOG" || status=${PIPESTATUS[0]}
+    (( status == 0 )) || return "$status"
+    APP_PATH="$BUNDLE_DIR/macos/qedit.app"
+    command -v codesign >/dev/null 2>&1 || {
+      echo "Error: codesign is required for an ad-hoc signed macOS preview" >&2
+      return 1
+    }
+    codesign --sign - --force --deep "$APP_PATH"
+    codesign --verify --deep --strict "$APP_PATH"
+    if [[ "${1:-}" == "degraded" ]]; then
+      CI=true pnpm exec tauri bundle --bundles dmg 2>&1 | tee "$BUILD_LOG" || status=${PIPESTATUS[0]}
+    else
+      pnpm exec tauri bundle --bundles dmg 2>&1 | tee "$BUILD_LOG" || status=${PIPESTATUS[0]}
+    fi
+  elif [[ "${1:-}" == "degraded" ]]; then
     CI=true pnpm exec tauri build --bundles app,dmg 2>&1 | tee "$BUILD_LOG" || status=${PIPESTATUS[0]}
   else
     pnpm exec tauri build --bundles app,dmg 2>&1 | tee "$BUILD_LOG" || status=${PIPESTATUS[0]}
