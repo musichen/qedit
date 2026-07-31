@@ -1,10 +1,16 @@
-import { Save, X } from 'lucide-react';
+import { Save, Terminal as TerminalIcon, X } from 'lucide-react';
 import { useRef } from 'react';
 
 import { useEditor } from './EditorContext';
 import type { OpenTab } from './EditorContext';
 
-export function TabBar() {
+export function TabBar({
+  onOpenTerminal,
+  terminalVisible = false,
+}: {
+  onOpenTerminal?: () => void;
+  terminalVisible?: boolean;
+}) {
   const {
     openTabs,
     activeFilePath,
@@ -62,6 +68,21 @@ export function TabBar() {
           ))}
         </div>
       )}
+      <button
+        type="button"
+        className={`flex h-full shrink-0 items-center gap-1.5 border-r border-border-subtle px-3 text-xs transition-colors ${
+          terminalVisible
+            ? 'border-t-2 border-t-accent bg-tab-active text-text-primary'
+            : 'text-text-secondary hover:bg-hover hover:text-text-primary'
+        }`}
+        onClick={onOpenTerminal}
+        aria-label="Open Terminal"
+        aria-pressed={terminalVisible}
+        title="Open Terminal"
+      >
+        <TerminalIcon className="h-3.5 w-3.5" />
+        <span>Terminal</span>
+      </button>
       <div className="flex shrink-0 items-center gap-0.5 border-l border-border-subtle px-1">
         <button
           type="button"
