@@ -455,7 +455,9 @@ function EditorLayout() {
             <ResizablePanel
               id="terminal"
               panelRef={terminalPanelRef}
-              defaultSize={`${settings.terminalPanelHeight}px`}
+              defaultSize={
+                terminalVisible ? `${settings.terminalPanelHeight}px` : '0px'
+              }
               minSize={`${MIN_TERMINAL_PANEL_HEIGHT}px`}
               collapsedSize="0px"
               collapsible
