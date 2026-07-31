@@ -238,7 +238,7 @@ jobs:
             if [[ "${QEDIT_REQUIRE_SIGNING}" == 1 ]]; then
               echo 'Signed publishing was required by repository variable QEDIT_REQUIRE_SIGNING=1.'
             else
-              echo 'This is an unsigned public preview because QEDIT_REQUIRE_SIGNING is not enabled or signing secrets are absent.'
+              echo 'This is an unsigned public preview; macOS app bundles are ad-hoc signed when Developer ID credentials are absent (not notarized, with first-launch right-click Open potentially required).'
             fi
             echo
             echo '### Per-target status'

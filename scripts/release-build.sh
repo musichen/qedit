@@ -73,7 +73,11 @@ case "$PLATFORM" in
     # Reuse build-mac.sh rather than calling tauri build directly so this path
     # gets the same headless-Finder DMG retry (see scripts/build-mac.sh) instead
     # of hard-failing when create-dmg's AppleScript step has no live Finder.
-    bash "$PROJECT_ROOT/scripts/build-mac.sh"
+    if [[ -z "${APPLE_SIGNING_IDENTITY:-}" ]]; then
+      QEDIT_ADHOC_SIGN=1 bash "$PROJECT_ROOT/scripts/build-mac.sh"
+    else
+      bash "$PROJECT_ROOT/scripts/build-mac.sh"
+    fi
     ;;
   windows) pnpm exec tauri build --bundles msi,nsis ;;
   # shell.open=true makes Tauri's AppImage bundler copy xdg-open from the

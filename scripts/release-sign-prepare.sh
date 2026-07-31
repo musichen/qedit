@@ -35,7 +35,7 @@ case "$TARGET" in
   macos-*)
     if ! has_all_values APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; then
       if [[ "${QEDIT_REQUIRE_SIGNING:-}" != 1 ]]; then
-        echo "warning: macOS signing credentials are absent or incomplete; continuing as an unsigned public preview"
+        echo "warning: macOS signing credentials are absent or incomplete; continuing as an ad-hoc signed public preview (not notarized)"
         exit 0
       fi
       echo "Error: macOS signing is required but credentials are absent or incomplete" >&2
