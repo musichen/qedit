@@ -1,5 +1,6 @@
 import { Save, Terminal as TerminalIcon, X } from 'lucide-react';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
+import type { DragEvent } from 'react';
 
 import { useEditor } from './EditorContext';
 import type { OpenTab } from './EditorContext';
@@ -7,9 +8,15 @@ import type { OpenTab } from './EditorContext';
 export function TabBar({
   onOpenTerminal,
   terminalVisible = false,
+  terminalEditorVisible = false,
+  onDropTerminal,
+  onCloseTerminalEditor,
 }: {
   onOpenTerminal?: () => void;
   terminalVisible?: boolean;
+  terminalEditorVisible?: boolean;
+  onDropTerminal?: () => void;
+  onCloseTerminalEditor?: () => void;
 }) {
   const {
     openTabs,
@@ -19,6 +26,16 @@ export function TabBar({
     saveActiveFileAs,
   } = useEditor();
   const tabRefs = useRef(new Map<string, HTMLDivElement>());
+  const [terminalDropActive, setTerminalDropActive] = useState(false);
+
+  const handleTerminalDrop = (event: DragEvent) => {
+    if (!event.dataTransfer.types.includes('text/qedit-terminal')) return;
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    setTerminalDropActive(false);
+    onDropTerminal?.();
+  };
 
   const navigateTab = (index: number) => {
     const tab = openTabs[index];
@@ -31,17 +48,27 @@ export function TabBar({
 
   return (
     <div className="flex h-tab items-stretch border-b border-border-subtle bg-tab">
-      {openTabs.length === 0 ? (
-        <span className="flex min-w-0 flex-1 items-center px-4 text-xs text-text-muted">
-          No open files
-        </span>
-      ) : (
-        <div
-          className="flex min-w-0 flex-1 items-stretch overflow-x-auto"
-          role="tablist"
-          aria-label="Open files"
-        >
-          {openTabs.map((tab, index) => (
+      <div
+        className={`flex min-w-0 flex-1 items-stretch overflow-x-auto ${
+          terminalDropActive ? 'bg-accent/10 ring-1 ring-inset ring-accent' : ''
+        }`}
+        role="tablist"
+        aria-label="Open files"
+        onDragOver={(event) => {
+          if (!event.dataTransfer.types.includes('text/qedit-terminal')) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+          setTerminalDropActive(true);
+        }}
+        onDragLeave={() => setTerminalDropActive(false)}
+        onDrop={handleTerminalDrop}
+      >
+        {openTabs.length === 0 ? (
+          <span className="flex min-w-0 flex-1 items-center px-4 text-xs text-text-muted">
+            No open files
+          </span>
+        ) : (
+          openTabs.map((tab, index) => (
             <Tab
               key={tab.path}
               tab={tab}
@@ -65,23 +92,49 @@ export function TabBar({
                 navigateTab(nextIndex);
               }}
             />
-          ))}
-        </div>
-      )}
+          ))
+        )}
+      </div>
       <button
         type="button"
+        draggable={!terminalEditorVisible}
         className={`flex h-full shrink-0 items-center gap-1.5 border-r border-border-subtle px-3 text-xs transition-colors ${
-          terminalVisible
+          terminalVisible || terminalEditorVisible
             ? 'border-t-2 border-t-accent bg-tab-active text-text-primary'
-            : 'text-text-secondary hover:bg-hover hover:text-text-primary'
+            : 'cursor-grab text-text-secondary hover:bg-hover hover:text-text-primary active:cursor-grabbing'
         }`}
         onClick={onOpenTerminal}
+        onDragStart={(event) => {
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/qedit-terminal', 'active');
+        }}
         aria-label="Open Terminal"
-        aria-pressed={terminalVisible}
-        title="Open Terminal"
+        aria-pressed={terminalVisible || terminalEditorVisible}
+        title="Open Terminal (drag into the tab bar to pin)"
       >
         <TerminalIcon className="h-3.5 w-3.5" />
         <span>Terminal</span>
+        {terminalEditorVisible && (
+          <span
+            role="button"
+            tabIndex={0}
+            className="ml-1 rounded p-0.5 hover:bg-hover"
+            onClick={(event) => {
+              event.stopPropagation();
+              onCloseTerminalEditor?.();
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                event.stopPropagation();
+                onCloseTerminalEditor?.();
+              }
+            }}
+            aria-label="Close terminal editor tab"
+          >
+            ×
+          </span>
+        )}
       </button>
       <div className="flex shrink-0 items-center gap-0.5 border-l border-border-subtle px-1">
         <button

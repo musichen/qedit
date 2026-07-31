@@ -123,7 +123,20 @@ function terminalTheme(theme: TokenTheme) {
  * presentation concern only - hiding just collapses the panel and parks every
  * terminal as inactive so it is refit and refocused on the way back.
  */
-export function TerminalPanel({ visible = true }: { visible?: boolean }) {
+export function TerminalPanel({
+  visible = true,
+  editorMode = false,
+  editorBounds = null,
+}: {
+  visible?: boolean;
+  editorMode?: boolean;
+  editorBounds?: {
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+  } | null;
+}) {
   const { workspaceRoot } = useWorkspace();
   const [state, dispatch] = useReducer(
     terminalTabsReducer,
@@ -277,9 +290,19 @@ export function TerminalPanel({ visible = true }: { visible?: boolean }) {
 
   return (
     <section
-      className={`h-full min-h-0 flex-col border-t border-border-default bg-editor ${
+      className={`${editorMode ? 'fixed z-20 shadow-2xl' : 'h-full'} min-h-0 flex-col border-t border-border-default bg-editor ${
         visible ? 'flex' : 'hidden'
       }`}
+      style={
+        editorMode && editorBounds
+          ? {
+              top: editorBounds.top,
+              left: editorBounds.left,
+              width: editorBounds.width,
+              height: editorBounds.height,
+            }
+          : undefined
+      }
       aria-label="Terminal panel"
       aria-hidden={!visible}
     >

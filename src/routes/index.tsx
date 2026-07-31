@@ -65,10 +65,18 @@ function EditorLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [statusBarVisible, setStatusBarVisible] = useState(true);
   const [terminalVisible, setTerminalVisible] = useState(false);
+  const [terminalEditorVisible, setTerminalEditorVisible] = useState(false);
+  const [editorBounds, setEditorBounds] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+  } | null>(null);
   const [quickOpenVisible, setQuickOpenVisible] = useState(false);
   const [commandPaletteVisible, setCommandPaletteVisible] = useState(false);
   const dirtyStateRef = useRef({ hasDirtyTabs, dirtyTabCount });
   const terminalPanelRef = useRef<TerminalPanelHandle | null>(null);
+  const editorAreaRef = useRef<HTMLDivElement | null>(null);
   dirtyStateRef.current = { hasDirtyTabs, dirtyTabCount };
 
   useEffect(() => {
@@ -85,10 +93,43 @@ function EditorLayout() {
 
   const openTerminal = useCallback(() => {
     setTerminalVisible(true);
+    setTerminalEditorVisible(false);
     requestAnimationFrame(() =>
       window.dispatchEvent(new Event('qedit:focus-terminal')),
     );
   }, []);
+
+  const pinTerminalInEditor = useCallback(() => {
+    setTerminalVisible(false);
+    setTerminalEditorVisible(true);
+  }, []);
+
+  useEffect(() => {
+    const updateBounds = () => {
+      const rect = editorAreaRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      setEditorBounds({
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height,
+      });
+    };
+
+    updateBounds();
+    window.addEventListener('resize', updateBounds);
+    const observer = editorAreaRef.current
+      ? new ResizeObserver(updateBounds)
+      : null;
+    if (observer && editorAreaRef.current)
+      observer.observe(editorAreaRef.current);
+
+    return () => {
+      window.removeEventListener('resize', updateBounds);
+      observer?.disconnect();
+    };
+  }, [terminalEditorVisible]);
 
   const handleTerminalLayoutChanged = useCallback(
     (
@@ -126,6 +167,7 @@ function EditorLayout() {
 
       if (/^terminal-[1-9]$/.test(action)) {
         setTerminalVisible(true);
+        setTerminalEditorVisible(false);
         window.dispatchEvent(
           new CustomEvent('qedit:terminal-tab', {
             detail: Number(action.slice('terminal-'.length)) - 1,
@@ -185,16 +227,19 @@ function EditorLayout() {
           break;
         case 'next-terminal':
           setTerminalVisible(true);
+          setTerminalEditorVisible(false);
           window.dispatchEvent(new Event('qedit:terminal-next'));
           break;
         case 'previous-terminal':
           setTerminalVisible(true);
+          setTerminalEditorVisible(false);
           window.dispatchEvent(new Event('qedit:terminal-previous'));
           break;
         case 'focus-terminal':
           // Revealing the panel makes its active terminal focus itself, so the
           // chord works the same whether or not the panel was already open.
           setTerminalVisible(true);
+          setTerminalEditorVisible(false);
           window.dispatchEvent(new Event('qedit:focus-terminal'));
           break;
         case 'focus-editor':
@@ -269,6 +314,7 @@ function EditorLayout() {
           break;
         case 'view.toggleTerminal':
           setTerminalVisible((visible) => !visible);
+          setTerminalEditorVisible(false);
           break;
         case 'view.commandPalette':
           setCommandPaletteVisible(true);
@@ -296,10 +342,12 @@ function EditorLayout() {
           break;
         case 'terminal.new':
           setTerminalVisible(true);
+          setTerminalEditorVisible(false);
           window.dispatchEvent(new Event('qedit:terminal-new'));
           break;
         case 'terminal.focus':
           setTerminalVisible(true);
+          setTerminalEditorVisible(false);
           window.dispatchEvent(new Event('qedit:focus-terminal'));
           break;
         case 'terminal.next':
@@ -432,6 +480,9 @@ function EditorLayout() {
           <TabBar
             onOpenTerminal={openTerminal}
             terminalVisible={terminalVisible}
+            terminalEditorVisible={terminalEditorVisible}
+            onDropTerminal={pinTerminalInEditor}
+            onCloseTerminalEditor={() => setTerminalEditorVisible(false)}
           />
           <ResizablePanelGroup
             orientation="vertical"
@@ -443,7 +494,10 @@ function EditorLayout() {
               minSize="100px"
               groupResizeBehavior="preserve-relative-size"
             >
-              <div className="h-full min-h-0 overflow-hidden">
+              <div
+                ref={editorAreaRef}
+                className="h-full min-h-0 overflow-hidden"
+              >
                 <Editor />
               </div>
             </ResizablePanel>
@@ -463,7 +517,11 @@ function EditorLayout() {
               collapsible
               groupResizeBehavior="preserve-pixel-size"
             >
-              <TerminalPanel visible={terminalVisible} />
+              <TerminalPanel
+                visible={terminalVisible || terminalEditorVisible}
+                editorMode={terminalEditorVisible}
+                editorBounds={editorBounds}
+              />
             </ResizablePanel>
           </ResizablePanelGroup>
         </main>

@@ -4,16 +4,18 @@ import {
   createNativeFile,
   removeNativeFile,
   renameNativeFile,
+  openNativeFolder,
 } from '../lib/workspace-bridge';
 
 const save = vi.fn<(options: unknown) => Promise<string | null>>();
+const open = vi.fn<(options: unknown) => Promise<string | string[] | null>>();
 const exists = vi.fn<(path: string) => Promise<boolean>>();
 const writeTextFile = vi.fn<(path: string, content: string) => Promise<void>>();
 const rename = vi.fn<(oldPath: string, newPath: string) => Promise<void>>();
 const stat = vi.fn<(path: string) => Promise<{ isFile: boolean }>>();
 const remove = vi.fn<(path: string) => Promise<void>>();
 
-vi.mock('@tauri-apps/plugin-dialog', () => ({ save }));
+vi.mock('@tauri-apps/plugin-dialog', () => ({ open, save }));
 vi.mock('@tauri-apps/plugin-fs', () => ({
   exists,
   writeTextFile,
@@ -27,6 +29,7 @@ vi.mock('@tauri-apps/api/path', () => ({
 
 beforeEach(() => {
   save.mockReset();
+  open.mockReset();
   exists.mockReset();
   writeTextFile.mockReset();
   rename.mockReset();
@@ -40,6 +43,17 @@ beforeEach(() => {
 });
 
 describe('native workspace file operations', () => {
+  it('accepts macOS single-selection folder results returned as an array', async () => {
+    open.mockResolvedValue(['/home/project']);
+
+    await expect(openNativeFolder()).resolves.toBe('/home/project');
+    expect(open).toHaveBeenCalledWith({
+      title: 'Open Folder or Project',
+      directory: true,
+      multiple: false,
+    });
+  });
+
   it('creates an empty file in the selected workspace and supports cancellation', async () => {
     save.mockResolvedValueOnce('/home/project/notes.md');
 
