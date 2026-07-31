@@ -8,6 +8,7 @@ export interface QEditSettings {
   minimap: boolean;
   lineNumbers: boolean;
   terminalFontSize: number;
+  terminalPanelHeight: number;
 }
 
 export const DEFAULT_SETTINGS: QEditSettings = {
@@ -18,6 +19,7 @@ export const DEFAULT_SETTINGS: QEditSettings = {
   minimap: true,
   lineNumbers: true,
   terminalFontSize: 12,
+  terminalPanelHeight: 208,
 };
 
 const STORE_PATH = 'qedit-settings.json';
@@ -69,6 +71,12 @@ export function sanitizeSettings(value: unknown): QEditSettings {
       DEFAULT_SETTINGS.terminalFontSize,
       10,
       24,
+    ),
+    terminalPanelHeight: asNumber(
+      (raw as { terminalPanelHeight?: unknown }).terminalPanelHeight,
+      DEFAULT_SETTINGS.terminalPanelHeight,
+      120,
+      800,
     ),
   };
 }

@@ -45,11 +45,14 @@ Monaco as the editing surface.
   hides it.
 - An integrated terminal panel sits below the editor and runs your `$SHELL`
   (`%COMSPEC%` on Windows) in the open project directory, or your home directory
-  when no folder is open. It stays hidden until **View > Toggle Terminal**, or a
-  shortcut that focuses or switches terminals (such as **Cmd/Ctrl+\`**),
-  reveals it. It follows the workspace root, reports each tab's state (starting,
-  running, exited, or error), and its shells are terminated when the app exits.
-  **Cmd/Ctrl+\`** moves focus between the editor and the terminal.
+  when no folder is open. It stays hidden until **View > Toggle Terminal**, the
+  **Terminal** button in the tab bar, or a shortcut that focuses or switches
+  terminals (such as **Cmd/Ctrl+\`**), reveals it. It follows the workspace
+  root, reports each tab's state (starting, running, exited, or error), and its
+  shells are terminated when the app exits. **Cmd/Ctrl+\`** moves focus between
+  the editor and the terminal. Drag the border above the panel to resize it -
+  your preferred height persists across restarts - or drag it below the
+  minimum height to collapse the panel.
 - The terminal panel supports multiple tabs: the **+** button opens another
   session, double-click or **F2** renames a tab, drag-and-drop or
   **Cmd/Ctrl+Arrow Left/Right** reorders tabs, and switching tabs keeps every

@@ -277,7 +277,7 @@ export function TerminalPanel({ visible = true }: { visible?: boolean }) {
 
   return (
     <section
-      className={`h-52 min-h-0 flex-col border-t border-border-default bg-editor ${
+      className={`h-full min-h-0 flex-col border-t border-border-default bg-editor ${
         visible ? 'flex' : 'hidden'
       }`}
       aria-label="Terminal panel"

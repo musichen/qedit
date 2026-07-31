@@ -1,3 +1,8 @@
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from '@qedit/ui/resizable';
 import { createFileRoute } from '@tanstack/react-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -14,6 +19,16 @@ import { TerminalPanel } from '#/components/TerminalPanel';
 import { useWorkspace, WorkspaceProvider } from '#/components/WorkspaceContext';
 import { isMenuActionAvailable } from '#/lib/menu-actions';
 import { shortcutActionForEvent } from '#/lib/shortcuts';
+
+const MIN_TERMINAL_PANEL_HEIGHT = 120;
+
+interface TerminalPanelHandle {
+  collapse: () => void;
+  expand: () => void;
+  getSize: () => { asPercentage: number; inPixels: number };
+  isCollapsed: () => boolean;
+  resize: (size: number | string) => void;
+}
 
 export const Route = createFileRoute('/')({
   component: Index,
@@ -53,7 +68,50 @@ function EditorLayout() {
   const [quickOpenVisible, setQuickOpenVisible] = useState(false);
   const [commandPaletteVisible, setCommandPaletteVisible] = useState(false);
   const dirtyStateRef = useRef({ hasDirtyTabs, dirtyTabCount });
+  const terminalPanelRef = useRef<TerminalPanelHandle | null>(null);
   dirtyStateRef.current = { hasDirtyTabs, dirtyTabCount };
+
+  useEffect(() => {
+    const panel = terminalPanelRef.current;
+    if (!panel) return;
+
+    if (terminalVisible) {
+      panel.expand();
+      panel.resize(`${settings.terminalPanelHeight}px`);
+    } else {
+      panel.collapse();
+    }
+  }, [settings.terminalPanelHeight, terminalVisible]);
+
+  const openTerminal = useCallback(() => {
+    setTerminalVisible(true);
+    requestAnimationFrame(() =>
+      window.dispatchEvent(new Event('qedit:focus-terminal')),
+    );
+  }, []);
+
+  const handleTerminalLayoutChanged = useCallback(
+    (
+      layout: { [panelId: string]: number },
+      meta: { isUserInteraction: boolean },
+    ) => {
+      if (!meta.isUserInteraction) return;
+
+      const terminalSize = layout.terminal;
+      if (terminalSize === undefined) return;
+
+      if (terminalSize <= 0) {
+        setTerminalVisible(false);
+        return;
+      }
+
+      const height = terminalPanelRef.current?.getSize().inPixels;
+      if (height === undefined || height < MIN_TERMINAL_PANEL_HEIGHT) return;
+
+      setSetting('terminalPanelHeight', Math.round(height));
+    },
+    [setSetting],
+  );
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
@@ -370,12 +428,44 @@ function EditorLayout() {
         <aside className="min-h-0 overflow-hidden" aria-hidden={!sidebarOpen}>
           {sidebarOpen && <FileTree />}
         </aside>
-        <main className="grid min-h-0 min-w-0 grid-rows-[var(--spacing-tab)_minmax(0,1fr)_auto] overflow-hidden">
-          <TabBar />
-          <div className="min-h-0 overflow-hidden">
-            <Editor />
-          </div>
-          <TerminalPanel visible={terminalVisible} />
+        <main className="grid min-h-0 min-w-0 grid-rows-[var(--spacing-tab)_minmax(0,1fr)] overflow-hidden">
+          <TabBar
+            onOpenTerminal={openTerminal}
+            terminalVisible={terminalVisible}
+          />
+          <ResizablePanelGroup
+            orientation="vertical"
+            className="min-h-0 flex-1"
+            onLayoutChanged={handleTerminalLayoutChanged}
+          >
+            <ResizablePanel
+              id="editor"
+              minSize="100px"
+              groupResizeBehavior="preserve-relative-size"
+            >
+              <div className="h-full min-h-0 overflow-hidden">
+                <Editor />
+              </div>
+            </ResizablePanel>
+            <ResizableHandle
+              withHandle
+              className="h-1 cursor-row-resize border-t border-border-default bg-editor"
+              aria-label="Resize terminal panel"
+            />
+            <ResizablePanel
+              id="terminal"
+              panelRef={terminalPanelRef}
+              defaultSize={
+                terminalVisible ? `${settings.terminalPanelHeight}px` : '0px'
+              }
+              minSize={`${MIN_TERMINAL_PANEL_HEIGHT}px`}
+              collapsedSize="0px"
+              collapsible
+              groupResizeBehavior="preserve-pixel-size"
+            >
+              <TerminalPanel visible={terminalVisible} />
+            </ResizablePanel>
+          </ResizablePanelGroup>
         </main>
       </div>
       {statusBarVisible && <StatusBar />}
