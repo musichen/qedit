@@ -1,4 +1,5 @@
 export type ShortcutAction =
+  | 'new-file'
   | 'open-file'
   | 'open-folder'
   | 'save'
@@ -111,6 +112,7 @@ export function shortcutActionForEvent(
 
   if (isTextEditingTarget(event.target)) return null;
 
+  if (key === 'n') return 'new-file';
   if (key === 'o') return event.shiftKey ? 'open-folder' : 'open-file';
   if (key === 's') return event.shiftKey ? 'save-as' : 'save';
   if (key === 'w') return 'close-tab';
