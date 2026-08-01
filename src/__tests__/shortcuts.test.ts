@@ -37,6 +37,9 @@ describe('shortcutActionForEvent', () => {
       shortcutActionForEvent(event({ key: 'PageUp', shiftKey: true })),
     ).toBe('previous-tab');
     expect(shortcutActionForEvent(event({ key: '`' }))).toBe('focus-terminal');
+    expect(shortcutActionForEvent(event({ key: '`', shiftKey: true }))).toBe(
+      'focus-terminal',
+    );
     expect(shortcutActionForEvent(event({ key: 'p' }))).toBe('quick-open');
     expect(shortcutActionForEvent(event({ key: 'f' }))).toBe('find');
   });

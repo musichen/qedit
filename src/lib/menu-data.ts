@@ -214,7 +214,15 @@ export const MENU_DATA: MenuDefinition[] = [
       { label: 'Split Terminal', action: 'terminal.split' },
       { label: 'Run Selected Text', action: 'terminal.runSelection' },
       separator(),
-      { label: 'Focus Terminal', action: 'terminal.focus', shortcut: '⌃`' },
+      {
+        label: 'Focus Terminal',
+        action: 'terminal.focus',
+        shortcut: '⌃⇧`',
+      },
+      {
+        label: 'Open Terminal in Editor Tab',
+        action: 'terminal.openEditor',
+      },
       { label: 'Focus Previous Terminal Group', action: 'terminal.previous' },
       { label: 'Focus Next Terminal Group', action: 'terminal.next' },
       { label: 'Rename Terminal…', action: 'terminal.rename' },

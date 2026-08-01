@@ -21,6 +21,7 @@ import {
   spawnTerminal,
   writeTerminal,
 } from '#/lib/terminal-bridge';
+import { setTerminalDragData } from '#/lib/terminal-drag';
 import {
   createTerminalTabsState,
   terminalTabsReducer,
@@ -241,12 +242,17 @@ export function TerminalPanel({
       const index = (event as CustomEvent<number>).detail;
       if (Number.isInteger(index)) selectTerminalIndex(index);
     };
+    const handleSelect = (event: Event) => {
+      const id = (event as CustomEvent<string>).detail;
+      if (typeof id === 'string') selectTerminal(id);
+    };
 
     window.addEventListener('qedit:terminal-next', handleNext);
     window.addEventListener('qedit:terminal-previous', handlePrevious);
     window.addEventListener('qedit:terminal-new', handleNew);
     window.addEventListener('qedit:terminal-close', handleClose);
     window.addEventListener('qedit:terminal-tab', handleIndex);
+    window.addEventListener('qedit:terminal-select', handleSelect);
 
     return () => {
       window.removeEventListener('qedit:terminal-next', handleNext);
@@ -254,11 +260,13 @@ export function TerminalPanel({
       window.removeEventListener('qedit:terminal-new', handleNew);
       window.removeEventListener('qedit:terminal-close', handleClose);
       window.removeEventListener('qedit:terminal-tab', handleIndex);
+      window.removeEventListener('qedit:terminal-select', handleSelect);
     };
   }, [
     addTerminal,
     closeTerminalTab,
     navigateTerminal,
+    selectTerminal,
     selectTerminalIndex,
     state.activeId,
   ]);
@@ -490,7 +498,7 @@ function TerminalTab({
       }}
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData('text/qedit-terminal', tab.id);
+        setTerminalDragData(event.dataTransfer, tab.id);
         void logInfo(`terminal tab drag started id=${tab.id}`);
       }}
       onDragOver={(event) => {

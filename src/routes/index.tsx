@@ -20,6 +20,7 @@ import { useWorkspace, WorkspaceProvider } from '#/components/WorkspaceContext';
 import { logInfo, openLocalLogsFolder } from '#/lib/app-logging';
 import { isMenuActionAvailable } from '#/lib/menu-actions';
 import { shortcutActionForEvent } from '#/lib/shortcuts';
+import { shouldOpenSidebarForWorkspace } from '#/lib/workspace-sidebar';
 
 const MIN_TERMINAL_PANEL_HEIGHT = 120;
 
@@ -61,7 +62,8 @@ function EditorLayout() {
     saveActiveFile,
     saveActiveFileAs,
   } = useEditor();
-  const { openFileDialog, openFolderDialog, createFile } = useWorkspace();
+  const { openFileDialog, openFolderDialog, createFile, workspaceRoot } =
+    useWorkspace();
   const { settings, setMode, setSetting } = useSettings();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [statusBarVisible, setStatusBarVisible] = useState(true);
@@ -86,6 +88,20 @@ function EditorLayout() {
     return () => window.removeEventListener('qedit:open-sidebar', openSidebar);
   }, []);
 
+  const previousWorkspaceRootRef = useRef<string | null>(workspaceRoot);
+  useEffect(() => {
+    if (
+      shouldOpenSidebarForWorkspace(
+        previousWorkspaceRootRef.current,
+        workspaceRoot,
+      )
+    ) {
+      setSidebarOpen(true);
+    }
+
+    previousWorkspaceRootRef.current = workspaceRoot;
+  }, [workspaceRoot]);
+
   useEffect(() => {
     const panel = terminalPanelRef.current;
     if (!panel) return;
@@ -106,9 +122,17 @@ function EditorLayout() {
     );
   }, []);
 
-  const pinTerminalInEditor = useCallback(() => {
+  const pinTerminalInEditor = useCallback((terminalId?: string) => {
     setTerminalVisible(false);
     setTerminalEditorVisible(true);
+    if (terminalId) {
+      window.dispatchEvent(
+        new CustomEvent('qedit:terminal-select', { detail: terminalId }),
+      );
+    }
+    requestAnimationFrame(() =>
+      window.dispatchEvent(new Event('qedit:focus-terminal')),
+    );
   }, []);
 
   useEffect(() => {
@@ -367,6 +391,9 @@ function EditorLayout() {
           setTerminalEditorVisible(false);
           window.dispatchEvent(new Event('qedit:focus-terminal'));
           break;
+        case 'terminal.openEditor':
+          pinTerminalInEditor();
+          break;
         case 'terminal.next':
           window.dispatchEvent(new Event('qedit:terminal-next'));
           break;
@@ -396,6 +423,7 @@ function EditorLayout() {
       createFile,
       openFileDialog,
       openFolderDialog,
+      pinTerminalInEditor,
       reloadActiveFile,
       reopenLastClosedTab,
       saveActiveFile,
@@ -496,6 +524,7 @@ function EditorLayout() {
         <main className="grid min-h-0 min-w-0 grid-rows-[var(--spacing-tab)_minmax(0,1fr)] overflow-hidden">
           <TabBar
             onOpenTerminal={openTerminal}
+            onOpenTerminalEditor={pinTerminalInEditor}
             terminalVisible={terminalVisible}
             terminalEditorVisible={terminalEditorVisible}
             onDropTerminal={pinTerminalInEditor}

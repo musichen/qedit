@@ -124,6 +124,7 @@ describe('WorkspaceContext', () => {
       });
 
       expect(openSidebar).toHaveBeenCalledTimes(1);
+      expect(workspace.workspaceRoot).toBe('/home/project');
     } finally {
       window.removeEventListener('qedit:open-sidebar', openSidebar);
     }

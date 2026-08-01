@@ -47,4 +47,22 @@ describe('menu action registry', () => {
       'help.releaseNotes',
     );
   });
+
+  it('keeps terminal focus discoverable and exposes the editor-tab command', () => {
+    const terminalItems = MENU_DATA.find(
+      (menu) => menu.label === 'Terminal',
+    )?.items.filter((item) => !item.separator);
+    const focus = terminalItems?.find(
+      (item) => item.action === 'terminal.focus',
+    );
+    const openEditor = terminalItems?.find(
+      (item) => item.action === 'terminal.openEditor',
+    );
+
+    expect(focus).toMatchObject({ label: 'Focus Terminal', shortcut: '⌃⇧`' });
+    expect(openEditor).toMatchObject({
+      label: 'Open Terminal in Editor Tab',
+    });
+    expect(menuCommands()).toEqual(expect.arrayContaining([focus, openEditor]));
+  });
 });

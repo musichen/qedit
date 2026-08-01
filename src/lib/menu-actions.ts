@@ -30,6 +30,7 @@ export const SHELL_MENU_ACTIONS: ReadonlySet<string> = new Set([
   'appearance.system',
   'terminal.new',
   'terminal.focus',
+  'terminal.openEditor',
   'terminal.next',
   'terminal.previous',
   'terminal.close',
