@@ -61,14 +61,16 @@ function EditorLayout() {
     setActiveFile,
     saveActiveFile,
     saveActiveFileAs,
+    createUntitledFile,
+    isActiveFileUntitled,
   } = useEditor();
-  const { openFileDialog, openFolderDialog, createFile, workspaceRoot } =
-    useWorkspace();
+  const { openFileDialog, openFolderDialog, workspaceRoot } = useWorkspace();
   const { settings, setMode, setSetting } = useSettings();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [statusBarVisible, setStatusBarVisible] = useState(true);
   const [terminalVisible, setTerminalVisible] = useState(false);
   const [terminalEditorVisible, setTerminalEditorVisible] = useState(false);
+  const [terminalEditorId, setTerminalEditorId] = useState<string | null>(null);
   const [editorBounds, setEditorBounds] = useState<{
     top: number;
     left: number;
@@ -122,9 +124,24 @@ function EditorLayout() {
     );
   }, []);
 
+  const openNewFile = useCallback(() => {
+    createUntitledFile();
+  }, [createUntitledFile]);
+
+  const saveFile = useCallback(() => {
+    if (isActiveFileUntitled) {
+      void saveActiveFileAs(
+        workspaceRoot ? `${workspaceRoot}/untitled.md` : undefined,
+      );
+    } else {
+      void saveActiveFile();
+    }
+  }, [isActiveFileUntitled, saveActiveFile, saveActiveFileAs, workspaceRoot]);
+
   const pinTerminalInEditor = useCallback((terminalId?: string) => {
     setTerminalVisible(false);
     setTerminalEditorVisible(true);
+    setTerminalEditorId(terminalId ?? null);
     if (terminalId) {
       window.dispatchEvent(
         new CustomEvent('qedit:terminal-select', { detail: terminalId }),
@@ -209,7 +226,7 @@ function EditorLayout() {
 
       switch (action) {
         case 'new-file':
-          void createFile();
+          openNewFile();
           break;
         case 'open-file':
           void openFileDialog();
@@ -218,7 +235,7 @@ function EditorLayout() {
           void openFolderDialog();
           break;
         case 'save':
-          void saveActiveFile();
+          saveFile();
           break;
         case 'save-as':
           void saveActiveFileAs();
@@ -302,9 +319,9 @@ function EditorLayout() {
       setActiveFile,
       openFileDialog,
       openFolderDialog,
-      createFile,
-      saveActiveFile,
+      openNewFile,
       saveActiveFileAs,
+      saveFile,
     ],
   );
 
@@ -325,7 +342,7 @@ function EditorLayout() {
             });
           break;
         case 'file.new':
-          void createFile();
+          openNewFile();
           break;
         case 'file.open':
           void openFileDialog();
@@ -334,7 +351,7 @@ function EditorLayout() {
           void openFolderDialog();
           break;
         case 'file.save':
-          void saveActiveFile();
+          saveFile();
           break;
         case 'file.saveAs':
           void saveActiveFileAs();
@@ -424,14 +441,14 @@ function EditorLayout() {
       activeFilePath,
       closeAllTabs,
       closeTab,
-      createFile,
+      openNewFile,
       openFileDialog,
       openFolderDialog,
       pinTerminalInEditor,
       reloadActiveFile,
       reopenLastClosedTab,
-      saveActiveFile,
       saveActiveFileAs,
+      saveFile,
       setMode,
       setSetting,
       settings.minimap,
@@ -523,7 +540,7 @@ function EditorLayout() {
         }}
       >
         <aside className="min-h-0 overflow-hidden" aria-hidden={!sidebarOpen}>
-          {sidebarOpen && <FileTree />}
+          {sidebarOpen && <FileTree onNewFile={openNewFile} />}
         </aside>
         <main className="grid min-h-0 min-w-0 grid-rows-[var(--spacing-tab)_minmax(0,1fr)] overflow-hidden">
           <TabBar
@@ -531,8 +548,12 @@ function EditorLayout() {
             onOpenTerminalEditor={pinTerminalInEditor}
             terminalVisible={terminalVisible}
             terminalEditorVisible={terminalEditorVisible}
+            terminalEditorId={terminalEditorId}
             onDropTerminal={pinTerminalInEditor}
-            onCloseTerminalEditor={() => setTerminalEditorVisible(false)}
+            onCloseTerminalEditor={() => {
+              setTerminalEditorVisible(false);
+              setTerminalEditorId(null);
+            }}
           />
           <ResizablePanelGroup
             orientation="vertical"

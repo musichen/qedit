@@ -1,5 +1,5 @@
 import { Save, Terminal as TerminalIcon, X } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
 
 import { useEditor } from './EditorContext';
@@ -17,6 +17,7 @@ export function TabBar({
   onOpenTerminalEditor,
   terminalVisible = false,
   terminalEditorVisible = false,
+  terminalEditorId,
   onDropTerminal,
   onCloseTerminalEditor,
 }: {
@@ -26,6 +27,7 @@ export function TabBar({
   terminalEditorVisible?: boolean;
   onDropTerminal?: (terminalId: string) => void;
   onCloseTerminalEditor?: () => void;
+  terminalEditorId?: string | null;
 }) {
   const {
     openTabs,
@@ -37,14 +39,62 @@ export function TabBar({
   const tabRefs = useRef(new Map<string, HTMLDivElement>());
   const [terminalDropActive, setTerminalDropActive] = useState(false);
 
+  useEffect(() => {
+    const handlePointerDrag = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          id?: unknown;
+          phase?: unknown;
+          x?: unknown;
+          y?: unknown;
+        }>
+      ).detail;
+      if (
+        typeof detail?.id !== 'string' ||
+        typeof detail.x !== 'number' ||
+        typeof detail.y !== 'number'
+      )
+        return;
+
+      const target = document
+        .elementFromPoint(detail.x, detail.y)
+        ?.closest('[data-qedit-terminal-drop-target="true"]');
+      const isTarget = target !== null;
+      setTerminalDropActive(isTarget && detail.phase === 'move');
+
+      if (isTarget && detail.phase === 'drop') {
+        setTerminalDropActive(false);
+        void logInfo(
+          `terminal session pointer-dropped into file tab bar id=${detail.id}`,
+        );
+        onDropTerminal?.(detail.id);
+      }
+    };
+
+    window.addEventListener('qedit:terminal-pointer-drag', handlePointerDrag);
+
+    return () =>
+      window.removeEventListener(
+        'qedit:terminal-pointer-drag',
+        handlePointerDrag,
+      );
+  }, [onDropTerminal]);
+
   const handleTerminalDrop = (event: DragEvent) => {
     const terminalId = getTerminalDragId(event.dataTransfer);
     if (!terminalId) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
     setTerminalDropActive(false);
-    void logInfo('terminal action dropped into file tab bar');
+    void logInfo(`terminal session dropped into file tab bar id=${terminalId}`);
     onDropTerminal?.(terminalId);
+  };
+
+  const handleTerminalDragOver = (event: DragEvent) => {
+    if (!isTerminalDragOver(event.dataTransfer)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    setTerminalDropActive(true);
   };
 
   const navigateTab = (index: number) => {
@@ -57,21 +107,20 @@ export function TabBar({
   };
 
   return (
-    <div className="flex h-tab items-stretch border-b border-border-subtle bg-tab">
+    <div
+      className="flex h-tab items-stretch border-b border-border-subtle bg-tab"
+      data-qedit-terminal-drop-target="true"
+      onDragEnter={handleTerminalDragOver}
+      onDragOver={handleTerminalDragOver}
+      onDragLeave={() => setTerminalDropActive(false)}
+      onDrop={handleTerminalDrop}
+    >
       <div
         className={`flex min-w-0 flex-1 items-stretch overflow-x-auto ${
           terminalDropActive ? 'bg-accent/10 ring-1 ring-inset ring-accent' : ''
         }`}
         role="tablist"
         aria-label="Open files"
-        onDragOver={(event) => {
-          if (!isTerminalDragOver(event.dataTransfer)) return;
-          event.preventDefault();
-          event.dataTransfer.dropEffect = 'move';
-          setTerminalDropActive(true);
-        }}
-        onDragLeave={() => setTerminalDropActive(false)}
-        onDrop={handleTerminalDrop}
       >
         {openTabs.length === 0 && !terminalEditorVisible ? (
           <span className="flex min-w-0 flex-1 items-center px-4 text-xs text-text-muted">
@@ -106,6 +155,7 @@ export function TabBar({
         )}
         {terminalEditorVisible && (
           <TerminalEditorTab
+            terminalId={terminalEditorId}
             onSelect={onOpenTerminalEditor}
             onClose={onCloseTerminalEditor}
           />
@@ -164,9 +214,11 @@ export function TabBar({
 }
 
 function TerminalEditorTab({
+  terminalId,
   onSelect,
   onClose,
 }: {
+  terminalId?: string | null;
   onSelect?: () => void;
   onClose?: () => void;
 }) {
@@ -187,7 +239,9 @@ function TerminalEditorTab({
       }}
     >
       <TerminalIcon className="h-3.5 w-3.5 shrink-0" />
-      <span className="min-w-0 flex-1 truncate">Terminal</span>
+      <span className="min-w-0 flex-1 truncate">
+        {terminalId?.replace(/^terminal-/, 'Terminal ') || 'Terminal'}
+      </span>
       <button
         type="button"
         className="rounded p-0.5 opacity-0 transition-opacity hover:bg-hover group-hover:opacity-100 group-focus-within:opacity-100"

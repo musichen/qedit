@@ -13,7 +13,6 @@ import type { WorkspaceEntry } from '#/lib/workspace-bridge';
 const openNativeFolder = vi.fn<() => Promise<string | null>>();
 const readWorkspaceDirectory =
   vi.fn<(root: string) => Promise<WorkspaceEntry[]>>();
-const createNativeFile = vi.fn<(root: string) => Promise<string | null>>();
 const readWorkspaceFiles = vi.fn<(root: string) => Promise<WorkspaceEntry[]>>();
 const saveNativeFile =
   vi.fn<(defaultPath?: string) => Promise<string | null>>();
@@ -30,7 +29,6 @@ vi.mock('#/lib/workspace-bridge', async (importOriginal) => {
     openNativeFile: () => Promise.resolve(null),
     openNativeFolder: () => openNativeFolder(),
     readWorkspaceDirectory: (root: string) => readWorkspaceDirectory(root),
-    createNativeFile: (root: string) => createNativeFile(root),
     readWorkspaceFiles: (root: string) => readWorkspaceFiles(root),
     saveNativeFile: (defaultPath?: string) => saveNativeFile(defaultPath),
     renameNativeFile: (oldPath: string, newPath: string) =>
@@ -77,7 +75,6 @@ const renderWorkspace = () => render(wrapper({ children: null }));
 beforeEach(() => {
   openNativeFolder.mockReset();
   readWorkspaceDirectory.mockReset();
-  createNativeFile.mockReset();
   readWorkspaceFiles.mockReset();
   saveNativeFile.mockReset();
   saveNativeFile.mockResolvedValue(null);
@@ -159,32 +156,6 @@ describe('WorkspaceContext', () => {
       '/home/second/main.ts',
       '/home/second/nested/util.ts',
     ]);
-  });
-
-  it('creates a file and refreshes the workspace before opening it', async () => {
-    openNativeFolder.mockResolvedValue('/home/project');
-    readWorkspaceDirectory
-      .mockResolvedValueOnce([file('/home/project/main.ts')])
-      .mockResolvedValueOnce([
-        file('/home/project/main.ts'),
-        file('/home/project/new.md'),
-      ]);
-    createNativeFile.mockResolvedValue('/home/project/new.md');
-
-    renderWorkspace();
-    await act(async () => {
-      await workspace.openFolderDialog();
-    });
-    await act(async () => {
-      await workspace.createFile();
-    });
-
-    expect(readWorkspaceDirectory).toHaveBeenCalledTimes(2);
-    expect(workspace.rootEntries.map((entry) => entry.path)).toEqual([
-      '/home/project/main.ts',
-      '/home/project/new.md',
-    ]);
-    expect(editor.activeFilePath).toBe('/home/project/new.md');
   });
 
   it('discovers nested files for workspace search', async () => {

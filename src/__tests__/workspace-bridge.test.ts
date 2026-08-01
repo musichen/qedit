@@ -1,25 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  createNativeFile,
   removeNativeFile,
   openNativeFile,
   renameNativeFile,
   openNativeFolder,
 } from '../lib/workspace-bridge';
 
-const save = vi.fn<(options: unknown) => Promise<string | null>>();
 const open = vi.fn<(options: unknown) => Promise<string | string[] | null>>();
 const exists = vi.fn<(path: string) => Promise<boolean>>();
-const writeTextFile = vi.fn<(path: string, content: string) => Promise<void>>();
 const rename = vi.fn<(oldPath: string, newPath: string) => Promise<void>>();
 const stat = vi.fn<(path: string) => Promise<{ isFile: boolean }>>();
 const remove = vi.fn<(path: string) => Promise<void>>();
 
-vi.mock('@tauri-apps/plugin-dialog', () => ({ open, save }));
+vi.mock('@tauri-apps/plugin-dialog', () => ({ open }));
 vi.mock('@tauri-apps/plugin-fs', () => ({
   exists,
-  writeTextFile,
   rename,
   stat,
   remove,
@@ -29,18 +25,15 @@ vi.mock('@tauri-apps/api/path', () => ({
 }));
 
 beforeEach(() => {
-  save.mockReset();
   open.mockReset();
   exists.mockReset();
-  writeTextFile.mockReset();
   rename.mockReset();
   stat.mockReset();
   remove.mockReset();
-  exists.mockResolvedValue(false);
-  writeTextFile.mockResolvedValue(undefined);
   rename.mockResolvedValue(undefined);
   stat.mockResolvedValue({ isFile: true });
   remove.mockResolvedValue(undefined);
+  exists.mockResolvedValue(false);
 });
 
 describe('native workspace file operations', () => {
@@ -66,38 +59,6 @@ describe('native workspace file operations', () => {
       multiple: false,
     });
     expect(open.mock.calls[0]?.[0]).not.toHaveProperty('filters');
-  });
-
-  it('creates an empty file in the selected workspace and supports cancellation', async () => {
-    save.mockResolvedValueOnce('/home/project/notes.md');
-
-    await expect(createNativeFile('/home/project')).resolves.toBe(
-      '/home/project/notes.md',
-    );
-    expect(save).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: 'New File',
-        defaultPath: '/home/project/untitled.md',
-      }),
-    );
-    expect(writeTextFile).toHaveBeenCalledWith('/home/project/notes.md', '');
-
-    save.mockResolvedValueOnce(null);
-    await expect(createNativeFile('/home/project')).resolves.toBeNull();
-    expect(writeTextFile).toHaveBeenCalledTimes(1);
-  });
-
-  it('rejects existing and outside-workspace destinations', async () => {
-    save.mockResolvedValueOnce('/home/project/notes.md');
-    exists.mockResolvedValueOnce(true);
-    await expect(createNativeFile('/home/project')).rejects.toThrow(
-      'already exists',
-    );
-
-    save.mockResolvedValueOnce('/home/other/notes.md');
-    await expect(createNativeFile('/home/project')).rejects.toThrow(
-      'inside the open workspace',
-    );
   });
 
   it('keeps rename and delete operations inside the native home boundary', async () => {

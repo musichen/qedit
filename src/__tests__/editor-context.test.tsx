@@ -41,6 +41,27 @@ beforeEach(() => {
 
 describe('EditorContext', () => {
   describe('openFile', () => {
+    it('opens an immediately editable untitled buffer for New File', () => {
+      const { result } = renderHook(() => useEditor(), { wrapper });
+
+      act(() => {
+        result.current.createUntitledFile();
+      });
+
+      const tab = result.current.openTabs[0];
+      expect(tab).toMatchObject({
+        name: 'Untitled-1',
+        isModified: false,
+        isUntitled: true,
+      });
+      expect(result.current.activeFilePath).toBe(tab?.path);
+      expect(result.current.fileStatus.get(tab?.path ?? '')).toEqual({
+        kind: 'loaded',
+      });
+      expect(result.current.fileContents.get(tab?.path ?? '')).toBe('');
+      expect(result.current.isActiveFileUntitled).toBe(true);
+    });
+
     it('adds a new tab when opening a file', () => {
       const { result } = renderHook(() => useEditor(), { wrapper });
 
@@ -433,6 +454,53 @@ describe('EditorContext', () => {
         name: 'renamed.ts',
         isModified: false,
       });
+    });
+
+    it('saves an untitled buffer using the workspace default location', async () => {
+      saveDialog.mockResolvedValue('/home/project/untitled.md');
+
+      const { result } = renderHook(() => useEditor(), { wrapper });
+
+      act(() => {
+        result.current.createUntitledFile();
+      });
+      const sourcePath = result.current.activeFilePath as string;
+      act(() => {
+        result.current.updateFileContent(sourcePath, 'draft');
+        result.current.markModified(sourcePath, true);
+      });
+
+      await act(async () => {
+        await result.current.saveActiveFileAs('/home/project/untitled.md');
+      });
+
+      expect(saveDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ defaultPath: '/home/project/untitled.md' }),
+      );
+      expect(writeTextFile).toHaveBeenCalledWith(
+        '/home/project/untitled.md',
+        'draft',
+      );
+      expect(result.current.isActiveFileUntitled).toBe(false);
+      expect(result.current.activeFilePath).toBe('/home/project/untitled.md');
+    });
+
+    it('opens the OS save dialog without a default location when no workspace is open', async () => {
+      saveDialog.mockResolvedValue('/home/chosen.md');
+
+      const { result } = renderHook(() => useEditor(), { wrapper });
+
+      act(() => {
+        result.current.createUntitledFile();
+      });
+      await act(async () => {
+        await result.current.saveActiveFileAs();
+      });
+
+      expect(saveDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ defaultPath: undefined }),
+      );
+      expect(result.current.activeFilePath).toBe('/home/chosen.md');
     });
 
     it('rejects a Save As destination outside the home directory', async () => {
