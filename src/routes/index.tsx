@@ -208,6 +208,9 @@ function EditorLayout() {
       }
 
       switch (action) {
+        case 'new-file':
+          void createFile();
+          break;
         case 'open-file':
           void openFileDialog();
           break;
@@ -299,6 +302,7 @@ function EditorLayout() {
       setActiveFile,
       openFileDialog,
       openFolderDialog,
+      createFile,
       saveActiveFile,
       saveActiveFileAs,
     ],

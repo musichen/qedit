@@ -65,4 +65,13 @@ describe('menu action registry', () => {
     });
     expect(menuCommands()).toEqual(expect.arrayContaining([focus, openEditor]));
   });
+
+  it('keeps New File discoverable with the macOS shortcut label', () => {
+    const newFile = MENU_DATA.find((menu) => menu.label === 'File')?.items.find(
+      (item) => item.action === 'file.new',
+    );
+
+    expect(newFile).toMatchObject({ label: 'New File', shortcut: '⌘N' });
+    expect(menuCommands()).toEqual(expect.arrayContaining([newFile]));
+  });
 });

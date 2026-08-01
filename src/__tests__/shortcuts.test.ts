@@ -14,6 +14,7 @@ const event = (overrides: Partial<KeyboardEvent>): KeyboardEvent =>
 
 describe('shortcutActionForEvent', () => {
   it('dispatches file, folder, save, and save-as shortcuts', () => {
+    expect(shortcutActionForEvent(event({ key: 'n' }))).toBe('new-file');
     expect(shortcutActionForEvent(event({ key: 'o' }))).toBe('open-file');
     expect(shortcutActionForEvent(event({ key: 'o', shiftKey: true }))).toBe(
       'open-folder',
@@ -59,6 +60,9 @@ describe('shortcutActionForEvent', () => {
 
     expect(
       shortcutActionForEvent(event({ key: 'o', target: input })),
+    ).toBeNull();
+    expect(
+      shortcutActionForEvent(event({ key: 'n', target: input })),
     ).toBeNull();
     expect(
       shortcutActionForEvent(event({ key: 'w', target: contentEditable })),

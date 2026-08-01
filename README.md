@@ -68,6 +68,7 @@ Monaco as the editing surface.
 
 | Shortcut | Action |
 |---|---|
+| **Cmd/Ctrl+N** | New file |
 | **Cmd/Ctrl+O** | Open file |
 | **Cmd/Ctrl+Shift+O** | Open folder |
 | **Cmd/Ctrl+S** | Save |
