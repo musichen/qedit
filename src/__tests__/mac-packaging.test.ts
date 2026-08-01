@@ -91,6 +91,7 @@ type StubMode =
   | 'ok'
   | 'dmg-stage-then-ok'
   | 'dmg-stage-always'
+  | 'adhoc-app-removed'
   | 'unrelated-failure';
 
 // Tauri swallows create-dmg's own output, so a Finder/AppleEvent failure only
@@ -104,6 +105,7 @@ const STUB_PNPM = `#!/usr/bin/env bash
 set -euo pipefail
 
 printf 'CI=%s\\n' "\${CI-}" >> "$STUB_DIR/invocations"
+printf '%s\\n' "$*" >> "$STUB_DIR/commands"
 attempt=$(wc -l < "$STUB_DIR/invocations" | tr -d ' ')
 
 bundle="$STUB_PROJECT_ROOT/src-tauri/target/release/bundle"
@@ -123,6 +125,11 @@ emit_bundles() {
   : > "$bundle/dmg/qedit_0.1.0_aarch64.dmg"
 }
 
+emit_dmg_only() {
+  rm -rf "$bundle/macos/qedit.app"
+  : > "$bundle/dmg/qedit_0.1.0_aarch64.dmg"
+}
+
 case "$STUB_MODE" in
   ok)
     emit_bundles
@@ -136,6 +143,15 @@ case "$STUB_MODE" in
     fail_dmg_stage
     ;;
   dmg-stage-always) fail_dmg_stage ;;
+  adhoc-app-removed)
+    case "$*" in
+      *'build --bundles app'*) emit_bundles; exit 0 ;;
+      *'bundle --bundles dmg'*) emit_dmg_only; exit 0 ;;
+      *'bundle --bundles app'*) emit_bundles; exit 0 ;;
+    esac
+    echo "unexpected command: $*" >&2
+    exit 1
+    ;;
   unrelated-failure)
     echo "error: could not compile \\\`qedit\\\`" >&2
     exit 101
@@ -178,6 +194,13 @@ function runBuildMac(mode: StubMode, staleFinalDmgs: string[] = []) {
   writeFileSync(join(stubDir, 'pnpm'), STUB_PNPM, { mode: 0o755 });
   chmodSync(join(stubDir, 'pnpm'), 0o755);
   writeFileSync(join(stubDir, 'invocations'), '');
+  writeFileSync(join(stubDir, 'commands'), '');
+  writeFileSync(
+    join(stubDir, 'codesign'),
+    '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$STUB_DIR/codesign-calls"\n',
+    { mode: 0o755 },
+  );
+  writeFileSync(join(stubDir, 'codesign-calls'), '');
 
   const result = spawnSync(
     'bash',
@@ -192,6 +215,7 @@ function runBuildMac(mode: StubMode, staleFinalDmgs: string[] = []) {
         STUB_DIR: stubDir,
         STUB_PROJECT_ROOT: fakeRoot,
         STUB_MODE: mode,
+        QEDIT_ADHOC_SIGN: mode === 'adhoc-app-removed' ? '1' : '',
       },
     },
   );
@@ -202,6 +226,12 @@ function runBuildMac(mode: StubMode, staleFinalDmgs: string[] = []) {
     status: result.status,
     output: `${result.stdout}${result.stderr}`,
     attempts: readFileSync(join(stubDir, 'invocations'), 'utf-8')
+      .split('\n')
+      .filter(Boolean),
+    commands: readFileSync(join(stubDir, 'commands'), 'utf-8')
+      .split('\n')
+      .filter(Boolean),
+    codesignCalls: readFileSync(join(stubDir, 'codesign-calls'), 'utf-8')
       .split('\n')
       .filter(Boolean),
     dmgFiles: existsSync(join(bundleDir, 'dmg'))
@@ -219,6 +249,20 @@ afterEach(() => {
 });
 
 describe('macOS DMG build without Finder automation', () => {
+  it('restores the final app after DMG bundling and re-signs it', () => {
+    const run = runBuildMac('adhoc-app-removed');
+
+    expect(run.status).toBe(0);
+    expect(run.commands).toEqual([
+      'exec tauri build --bundles app',
+      'exec tauri bundle --bundles dmg',
+      'exec tauri bundle --bundles app',
+    ]);
+    expect(run.codesignCalls).toHaveLength(4);
+    expect(run.appExists).toBe(true);
+    expect(run.dmgFiles).toEqual(['qedit_0.1.0_aarch64.dmg']);
+  });
+
   it('retries with DMG presentation disabled and still emits the bundles', () => {
     const run = runBuildMac('dmg-stage-then-ok');
 

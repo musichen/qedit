@@ -39,12 +39,7 @@ run_bundler() {
     pnpm exec tauri build --bundles app 2>&1 | tee "$BUILD_LOG" || status=${PIPESTATUS[0]}
     (( status == 0 )) || return "$status"
     APP_PATH="$BUNDLE_DIR/macos/qedit.app"
-    command -v codesign >/dev/null 2>&1 || {
-      echo "Error: codesign is required for an ad-hoc signed macOS preview" >&2
-      return 1
-    }
-    codesign --sign - --force --deep "$APP_PATH"
-    codesign --verify --deep --strict "$APP_PATH"
+    sign_adhoc_app
     if [[ "${1:-}" == "degraded" ]]; then
       CI=true pnpm exec tauri bundle --bundles dmg 2>&1 | tee "$BUILD_LOG" || status=${PIPESTATUS[0]}
     else
@@ -56,6 +51,29 @@ run_bundler() {
     pnpm exec tauri build --bundles app,dmg 2>&1 | tee "$BUILD_LOG" || status=${PIPESTATUS[0]}
   fi
   return "$status"
+}
+
+restore_app_bundle() {
+  APP_PATH="$BUNDLE_DIR/macos/qedit.app"
+  if [[ -d "$APP_PATH" && -x "$APP_PATH/Contents/MacOS/qedit" ]]; then
+    return 0
+  fi
+
+  echo "warning: DMG bundling removed the app bundle; restoring it with an app-only bundling pass." >&2
+  pnpm exec tauri bundle --bundles app 2>&1 | tee "$BUILD_LOG" || {
+    echo "macOS app bundle restoration failed." >&2
+    return 1
+  }
+}
+
+sign_adhoc_app() {
+  APP_PATH="$BUNDLE_DIR/macos/qedit.app"
+  command -v codesign >/dev/null 2>&1 || {
+    echo "Error: codesign is required for an ad-hoc signed macOS preview" >&2
+    return 1
+  }
+  codesign --sign - --force --deep "$APP_PATH"
+  codesign --verify --deep --strict "$APP_PATH"
 }
 
 cd "$PROJECT_ROOT"
@@ -81,6 +99,10 @@ if ! run_bundler; then
 fi
 
 APP_PATH="$BUNDLE_DIR/macos/qedit.app"
+restore_app_bundle
+if [[ -n "$ADHOC_SIGN" ]]; then
+  sign_adhoc_app
+fi
 if [[ ! -d "$APP_PATH" || ! -x "$APP_PATH/Contents/MacOS/qedit" ]]; then
   echo "Expected macOS app bundle was not produced: $APP_PATH" >&2
   exit 1

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { spawnSync } from 'node:child_process';
 import {
+  chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -151,6 +153,109 @@ describe('release pipeline contract', () => {
     expect(workflow).toContain(
       'dist/release/v${{ steps.version.outputs.version }}/${{ matrix.target }}',
     );
+  });
+
+  it('restores an app removed by DMG bundling before creating app.zip', () => {
+    const root = mkdtempSync(join(tmpdir(), 'qedit-release-build-'));
+    const stubDir = join(root, 'stub');
+    const scriptsDir = join(root, 'scripts');
+    const tauriDir = join(root, 'src-tauri');
+    const outputDir = join(root, 'dist/release/v0.1.0/macos-arm64');
+    mkdirSync(stubDir);
+    mkdirSync(scriptsDir);
+    mkdirSync(tauriDir);
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({ version: '0.1.0' }),
+    );
+    writeFileSync(
+      join(tauriDir, 'tauri.conf.json'),
+      JSON.stringify({ version: '0.1.0' }),
+    );
+    writeFileSync(
+      join(tauriDir, 'Cargo.toml'),
+      '[package]\nversion = "0.1.0"\n',
+    );
+    writeFileSync(
+      join(scriptsDir, 'release-build.sh'),
+      readFileSync(join(projectRoot, 'scripts/release-build.sh')),
+      { mode: 0o755 },
+    );
+    writeFileSync(
+      join(scriptsDir, 'build-mac.sh'),
+      readFileSync(join(projectRoot, 'scripts/build-mac.sh')),
+      { mode: 0o755 },
+    );
+    chmodSync(join(scriptsDir, 'release-build.sh'), 0o755);
+    chmodSync(join(scriptsDir, 'build-mac.sh'), 0o755);
+
+    const pnpm = `#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "$*" >> "$STUB_DIR/commands"
+bundle="$STUB_PROJECT_ROOT/src-tauri/target/release/bundle"
+mkdir -p "$bundle/dmg" "$bundle/macos"
+emit_app() {
+  mkdir -p "$bundle/macos/qedit.app/Contents/MacOS"
+  : > "$bundle/macos/qedit.app/Contents/MacOS/qedit"
+  chmod +x "$bundle/macos/qedit.app/Contents/MacOS/qedit"
+}
+case "$*" in
+  *'build --bundles app'*) emit_app ;;
+  *'bundle --bundles dmg'*) rm -rf "$bundle/macos/qedit.app"; : > "$bundle/dmg/qedit_0.1.0_aarch64.dmg" ;;
+  *'bundle --bundles app'*) emit_app ;;
+  *) echo "unexpected pnpm command: $*" >&2; exit 1 ;;
+esac
+`;
+    writeFileSync(join(stubDir, 'pnpm'), pnpm, { mode: 0o755 });
+    writeFileSync(join(stubDir, 'codesign'), '#!/usr/bin/env bash\nexit 0\n', {
+      mode: 0o755,
+    });
+    writeFileSync(
+      join(stubDir, 'rustc'),
+      '#!/usr/bin/env bash\nprintf "host: aarch64-apple-darwin\\n"\n',
+      { mode: 0o755 },
+    );
+    writeFileSync(
+      join(stubDir, 'ditto'),
+      '#!/usr/bin/env bash\n: > "${!#}"\n',
+      { mode: 0o755 },
+    );
+    writeFileSync(join(stubDir, 'commands'), '');
+
+    try {
+      const result = spawnSync(
+        'bash',
+        [
+          join(scriptsDir, 'release-build.sh'),
+          'macos-arm64',
+          '0.1.0',
+          outputDir,
+        ],
+        {
+          cwd: root,
+          encoding: 'utf8',
+          env: {
+            PATH: `${stubDir}:${join(process.execPath, '..')}:/usr/bin:/bin`,
+            STUB_DIR: stubDir,
+            STUB_PROJECT_ROOT: root,
+          },
+        },
+      );
+      expect(result.status).toBe(0);
+      expect(
+        existsSync(join(outputDir, 'qedit-v0.1.0-macos-arm64.app.zip')),
+      ).toBe(true);
+      expect(
+        readFileSync(join(stubDir, 'commands'), 'utf8').split('\n'),
+      ).toEqual([
+        'exec tauri build --bundles app',
+        'exec tauri bundle --bundles dmg',
+        'exec tauri bundle --bundles app',
+        '',
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('uses a local automation identity and rerun-safe release refs', () => {
