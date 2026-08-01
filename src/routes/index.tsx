@@ -302,6 +302,7 @@ function EditorLayout() {
       setActiveFile,
       openFileDialog,
       openFolderDialog,
+      createFile,
       saveActiveFile,
       saveActiveFileAs,
     ],
