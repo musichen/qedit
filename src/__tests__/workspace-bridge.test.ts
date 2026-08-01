@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createNativeFile,
   removeNativeFile,
+  openNativeFile,
   renameNativeFile,
   openNativeFolder,
 } from '../lib/workspace-bridge';
@@ -43,6 +44,18 @@ beforeEach(() => {
 });
 
 describe('native workspace file operations', () => {
+  it('allows Markdown and arbitrary file types in the Open File picker', async () => {
+    open.mockResolvedValue('/home/project/README.md');
+
+    await expect(openNativeFile()).resolves.toBe('/home/project/README.md');
+    expect(open).toHaveBeenCalledWith({
+      title: 'Open File',
+      directory: false,
+      multiple: false,
+      filters: [{ name: 'All Files', extensions: ['*'] }],
+    });
+  });
+
   it('accepts macOS single-selection folder results returned as an array', async () => {
     open.mockResolvedValue(['/home/project']);
 
@@ -52,6 +65,7 @@ describe('native workspace file operations', () => {
       directory: true,
       multiple: false,
     });
+    expect(open.mock.calls[0]?.[0]).not.toHaveProperty('filters');
   });
 
   it('creates an empty file in the selected workspace and supports cancellation', async () => {
