@@ -287,7 +287,9 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       ...openTabs.map((tab) => ({
         ...tab,
         isModified: false,
-        content: tab.isUntitled ? (fileContents.get(tab.path) ?? '') : undefined,
+        content: tab.isUntitled
+          ? (fileContents.get(tab.path) ?? '')
+          : undefined,
       })),
     ].slice(-20);
     setOpenTabs([]);
