@@ -484,7 +484,7 @@ function TerminalTab({
   return (
     <div
       ref={setRef}
-      draggable={false}
+      draggable={!isRenaming}
       data-terminal-tab={tab.id}
       className={`group flex h-full min-w-28 max-w-56 shrink-0 cursor-pointer items-center gap-1.5 border-r px-2.5 text-[11px] transition-colors ${
         isActive

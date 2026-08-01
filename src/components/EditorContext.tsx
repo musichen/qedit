@@ -142,7 +142,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   // Keep a small, disk-backed history for Cmd/Ctrl+Shift+T. Dirty buffers are
   // deliberately not retained because closing them requires explicit
   // confirmation to discard their edits.
-  const closedTabsRef = useRef<OpenTab[]>([]);
+  const closedTabsRef = useRef<(OpenTab & { content?: string })[]>([]);
   // Request ids are monotonic across the whole provider, never per path, so a
   // path whose entry is dropped on close (or replaced by Save As) can never
   // reuse an id an in-flight read is still waiting to match.
@@ -239,7 +239,15 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
       closedTabsRef.current = [
         ...closedTabsRef.current,
-        { path: closedTab.path, name: closedTab.name, isModified: false },
+        {
+          path: closedTab.path,
+          name: closedTab.name,
+          isModified: false,
+          isUntitled: closedTab.isUntitled,
+          content: closedTab.isUntitled
+            ? (fileContents.get(closedTab.path) ?? '')
+            : undefined,
+        },
       ].slice(-20);
       setOpenTabs(remaining);
       loadedRef.current.delete(path);
@@ -257,7 +265,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
       return true;
     },
-    [activeFilePath, openTabs],
+    [activeFilePath, openTabs, fileContents],
   );
 
   const closeAllTabs = useCallback((): boolean => {
@@ -276,7 +284,11 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
     closedTabsRef.current = [
       ...closedTabsRef.current,
-      ...openTabs.map((tab) => ({ ...tab, isModified: false })),
+      ...openTabs.map((tab) => ({
+        ...tab,
+        isModified: false,
+        content: tab.isUntitled ? (fileContents.get(tab.path) ?? '') : undefined,
+      })),
     ].slice(-20);
     setOpenTabs([]);
     setActiveFilePath(null);
@@ -286,12 +298,30 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     setFileStatus(new Map());
 
     return true;
-  }, [openTabs]);
+  }, [openTabs, fileContents]);
 
   const reopenLastClosedTab = useCallback(() => {
     const lastClosed = closedTabsRef.current.pop();
 
     if (!lastClosed) return;
+
+    if (lastClosed.isUntitled) {
+      const { path, name, content } = lastClosed;
+
+      setOpenTabs((prev) => {
+        if (prev.some((tab) => tab.path === path)) return prev;
+
+        return [...prev, { path, name, isModified: false, isUntitled: true }];
+      });
+      setActiveFilePath(path);
+      setLanguage('plaintext');
+      loadedRef.current.add(path);
+      setFileContents((prev) => new Map(prev).set(path, content ?? ''));
+      setFileStatus((prev) => new Map(prev).set(path, { kind: 'loaded' }));
+      setSaveFailure(null);
+
+      return;
+    }
 
     openFile(lastClosed.path, lastClosed.name);
   }, [openFile]);
