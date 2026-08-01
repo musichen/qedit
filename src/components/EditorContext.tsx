@@ -26,6 +26,7 @@ export interface OpenTab {
   path: string;
   name: string;
   isModified: boolean;
+  isUntitled?: boolean;
 }
 
 export type FileStatus =
@@ -50,6 +51,7 @@ interface EditorContextValue {
   hasDirtyTabs: boolean;
   dirtyTabCount: number;
   openFile: (path: string, name: string, language?: string) => void;
+  createUntitledFile: () => void;
   closeTab: (path: string, discardUnsaved?: boolean) => boolean;
   closeAllTabs: () => boolean;
   reopenLastClosedTab: () => void;
@@ -62,7 +64,8 @@ interface EditorContextValue {
   setSaving: (saving: boolean) => void;
   updateFileContent: (path: string, content: string) => void;
   saveActiveFile: () => Promise<void>;
-  saveActiveFileAs: () => Promise<void>;
+  saveActiveFileAs: (defaultPath?: string) => Promise<void>;
+  isActiveFileUntitled: boolean;
 }
 
 const EditorContext = createContext<EditorContextValue | null>(null);
@@ -139,11 +142,12 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   // Keep a small, disk-backed history for Cmd/Ctrl+Shift+T. Dirty buffers are
   // deliberately not retained because closing them requires explicit
   // confirmation to discard their edits.
-  const closedTabsRef = useRef<OpenTab[]>([]);
+  const closedTabsRef = useRef<(OpenTab & { content?: string })[]>([]);
   // Request ids are monotonic across the whole provider, never per path, so a
   // path whose entry is dropped on close (or replaced by Save As) can never
   // reuse an id an in-flight read is still waiting to match.
   const nextLoadRequestRef = useRef(1);
+  const nextUntitledRef = useRef(1);
   const loadRequestRef = useRef<Map<string, number>>(new Map());
   const activeFileRef = useRef<string | null>(null);
   const openTabsRef = useRef<OpenTab[]>([]);
@@ -198,6 +202,22 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     [loadFile],
   );
 
+  const createUntitledFile = useCallback(() => {
+    const number = nextUntitledRef.current++;
+    const path = `qedit://untitled-${number}`;
+    const name = `Untitled-${number}`;
+
+    setOpenTabs((prev) => [
+      ...prev,
+      { path, name, isModified: false, isUntitled: true },
+    ]);
+    setActiveFilePath(path);
+    setLanguage('plaintext');
+    setFileContents((prev) => new Map(prev).set(path, ''));
+    setFileStatus((prev) => new Map(prev).set(path, { kind: 'loaded' }));
+    setSaveFailure(null);
+  }, []);
+
   const closeTab = useCallback(
     (path: string, discardUnsaved = false): boolean => {
       const closedTab = openTabs.find((tab) => tab.path === path);
@@ -219,7 +239,15 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
       closedTabsRef.current = [
         ...closedTabsRef.current,
-        { path: closedTab.path, name: closedTab.name, isModified: false },
+        {
+          path: closedTab.path,
+          name: closedTab.name,
+          isModified: false,
+          isUntitled: closedTab.isUntitled,
+          content: closedTab.isUntitled
+            ? (fileContents.get(closedTab.path) ?? '')
+            : undefined,
+        },
       ].slice(-20);
       setOpenTabs(remaining);
       loadedRef.current.delete(path);
@@ -237,7 +265,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
       return true;
     },
-    [activeFilePath, openTabs],
+    [activeFilePath, openTabs, fileContents],
   );
 
   const closeAllTabs = useCallback((): boolean => {
@@ -256,7 +284,13 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
     closedTabsRef.current = [
       ...closedTabsRef.current,
-      ...openTabs.map((tab) => ({ ...tab, isModified: false })),
+      ...openTabs.map((tab) => ({
+        ...tab,
+        isModified: false,
+        content: tab.isUntitled
+          ? (fileContents.get(tab.path) ?? '')
+          : undefined,
+      })),
     ].slice(-20);
     setOpenTabs([]);
     setActiveFilePath(null);
@@ -266,12 +300,30 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     setFileStatus(new Map());
 
     return true;
-  }, [openTabs]);
+  }, [openTabs, fileContents]);
 
   const reopenLastClosedTab = useCallback(() => {
     const lastClosed = closedTabsRef.current.pop();
 
     if (!lastClosed) return;
+
+    if (lastClosed.isUntitled) {
+      const { path, name, content } = lastClosed;
+
+      setOpenTabs((prev) => {
+        if (prev.some((tab) => tab.path === path)) return prev;
+
+        return [...prev, { path, name, isModified: false, isUntitled: true }];
+      });
+      setActiveFilePath(path);
+      setLanguage('plaintext');
+      loadedRef.current.add(path);
+      setFileContents((prev) => new Map(prev).set(path, content ?? ''));
+      setFileStatus((prev) => new Map(prev).set(path, { kind: 'loaded' }));
+      setSaveFailure(null);
+
+      return;
+    }
 
     openFile(lastClosed.path, lastClosed.name);
   }, [openFile]);
@@ -412,130 +464,142 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     }
   }, [activeFilePath, fileContents, fileStatus, markModified]);
 
-  const saveActiveFileAs = useCallback(async () => {
-    if (!activeFilePath) return;
+  const saveActiveFileAs = useCallback(
+    async (defaultPath?: string) => {
+      if (!activeFilePath) return;
 
-    const status = fileStatus.get(activeFilePath);
-    const content = fileContents.get(activeFilePath);
+      const status = fileStatus.get(activeFilePath);
+      const content = fileContents.get(activeFilePath);
 
-    if (status?.kind !== 'loaded' || content === undefined) {
-      setSaveFailure({
-        path: activeFilePath,
-        message: `Refusing to save ${activeFilePath}: the file is not ready`,
-        scope: 'file',
-      });
+      if (status?.kind !== 'loaded' || content === undefined) {
+        setSaveFailure({
+          path: activeFilePath,
+          message: `Refusing to save ${activeFilePath}: the file is not ready`,
+          scope: 'file',
+        });
 
-      return;
-    }
+        return;
+      }
 
-    const sourcePath = activeFilePath;
-    let targetPath: string | null;
+      const sourcePath = activeFilePath;
+      let targetPath: string | null;
 
-    try {
-      targetPath = await saveNativeFile(sourcePath);
-    } catch (error) {
-      setSaveFailure({
-        path: sourcePath,
-        message: `Could not save ${sourcePath} as a new file: ${errorMessage(error)}`,
-        scope: 'operation',
-      });
+      try {
+        const nativeDefaultPath =
+          defaultPath ??
+          (openTabsRef.current.find((tab) => tab.path === sourcePath)
+            ?.isUntitled
+            ? undefined
+            : sourcePath);
+        targetPath = await saveNativeFile(nativeDefaultPath);
+      } catch (error) {
+        setSaveFailure({
+          path: sourcePath,
+          message: `Could not save ${sourcePath} as a new file: ${errorMessage(error)}`,
+          scope: 'operation',
+        });
 
-      return;
-    }
+        return;
+      }
 
-    if (!targetPath) {
+      if (!targetPath) {
+        setSaveFailure(null);
+
+        return;
+      }
+
+      // The dialog can stay open while the user switches or closes tabs. The
+      // content and the source path are captured above, so a tab switch is
+      // harmless, but a closed source tab means there is no buffer left to save.
+      if (!openTabsRef.current.some((tab) => tab.path === sourcePath)) {
+        setSaveFailure({
+          path: sourcePath,
+          message: `Could not save as ${targetPath}: ${sourcePath} was closed before the save completed`,
+          scope: 'operation',
+        });
+
+        return;
+      }
+
+      if (
+        targetPath !== sourcePath &&
+        openTabsRef.current.some((tab) => tab.path === targetPath)
+      ) {
+        setSaveFailure({
+          path: sourcePath,
+          message: `Could not save as ${targetPath}: that file is already open`,
+          scope: 'operation',
+        });
+
+        return;
+      }
+
+      setSaving(true);
       setSaveFailure(null);
 
-      return;
-    }
+      try {
+        await writeNativeTextFile(targetPath, content);
+        window.dispatchEvent(new Event('qedit:workspace-refresh'));
+        const targetName = basenameFromPath(targetPath);
 
-    // The dialog can stay open while the user switches or closes tabs. The
-    // content and the source path are captured above, so a tab switch is
-    // harmless, but a closed source tab means there is no buffer left to save.
-    if (!openTabsRef.current.some((tab) => tab.path === sourcePath)) {
-      setSaveFailure({
-        path: sourcePath,
-        message: `Could not save as ${targetPath}: ${sourcePath} was closed before the save completed`,
-        scope: 'operation',
-      });
+        // The file exists on disk now, so it belongs in Recent regardless of what
+        // happened to the tabs while the native write was in flight.
+        db.addRecentFile(targetPath, targetName);
 
-      return;
-    }
+        // Keep the source tab's rename scoped to the tab that initiated Save As.
+        // The user may have closed it while the write was in flight, in which
+        // case there is no tab left to rename.
+        const sourceStillOpen = openTabsRef.current.some(
+          (tab) => tab.path === sourcePath,
+        );
+        if (!sourceStillOpen) return;
 
-    if (
-      targetPath !== sourcePath &&
-      openTabsRef.current.some((tab) => tab.path === targetPath)
-    ) {
-      setSaveFailure({
-        path: sourcePath,
-        message: `Could not save as ${targetPath}: that file is already open`,
-        scope: 'operation',
-      });
+        setOpenTabs((prev) =>
+          prev.map((tab) =>
+            tab.path === sourcePath
+              ? { path: targetPath, name: targetName, isModified: false }
+              : tab,
+          ),
+        );
+        setFileContents((prev) => {
+          const next = new Map(prev);
+          next.delete(sourcePath);
+          next.set(targetPath, content);
 
-      return;
-    }
+          return next;
+        });
+        setFileStatus((prev) => {
+          const next = new Map(prev);
+          next.delete(sourcePath);
+          next.set(targetPath, { kind: 'loaded' });
 
-    setSaving(true);
-    setSaveFailure(null);
-
-    try {
-      await writeNativeTextFile(targetPath, content);
-      window.dispatchEvent(new Event('qedit:workspace-refresh'));
-      const targetName = basenameFromPath(targetPath);
-
-      // The file exists on disk now, so it belongs in Recent regardless of what
-      // happened to the tabs while the native write was in flight.
-      db.addRecentFile(targetPath, targetName);
-
-      // Keep the source tab's rename scoped to the tab that initiated Save As.
-      // The user may have closed it while the write was in flight, in which
-      // case there is no tab left to rename.
-      const sourceStillOpen = openTabsRef.current.some(
-        (tab) => tab.path === sourcePath,
-      );
-      if (!sourceStillOpen) return;
-
-      setOpenTabs((prev) =>
-        prev.map((tab) =>
-          tab.path === sourcePath
-            ? { path: targetPath, name: targetName, isModified: false }
-            : tab,
-        ),
-      );
-      setFileContents((prev) => {
-        const next = new Map(prev);
-        next.delete(sourcePath);
-        next.set(targetPath, content);
-
-        return next;
-      });
-      setFileStatus((prev) => {
-        const next = new Map(prev);
-        next.delete(sourcePath);
-        next.set(targetPath, { kind: 'loaded' });
-
-        return next;
-      });
-      loadedRef.current.delete(sourcePath);
-      loadRequestRef.current.delete(sourcePath);
-      loadedRef.current.add(targetPath);
-      loadRequestRef.current.set(targetPath, nextLoadRequestRef.current++);
-      setActiveFilePath((current) =>
-        current === sourcePath ? targetPath : current,
-      );
-      if (activeFileRef.current === sourcePath) {
-        setLanguage(languageFromPath(targetPath));
+          return next;
+        });
+        loadedRef.current.delete(sourcePath);
+        loadRequestRef.current.delete(sourcePath);
+        loadedRef.current.add(targetPath);
+        loadRequestRef.current.set(targetPath, nextLoadRequestRef.current++);
+        setActiveFilePath((current) =>
+          current === sourcePath ? targetPath : current,
+        );
+        if (activeFileRef.current === sourcePath) {
+          setLanguage(languageFromPath(targetPath));
+        }
+      } catch (error) {
+        setSaveFailure({
+          path: sourcePath,
+          message: `Could not save as ${targetPath}: ${errorMessage(error)}`,
+          scope: 'operation',
+        });
+      } finally {
+        setSaving(false);
       }
-    } catch (error) {
-      setSaveFailure({
-        path: sourcePath,
-        message: `Could not save as ${targetPath}: ${errorMessage(error)}`,
-        scope: 'operation',
-      });
-    } finally {
-      setSaving(false);
-    }
-  }, [activeFilePath, fileContents, fileStatus]);
+    },
+    [activeFilePath, fileContents, fileStatus],
+  );
+
+  const activeTab = openTabs.find((tab) => tab.path === activeFilePath);
+  const isActiveFileUntitled = activeTab?.isUntitled === true;
 
   const visibleFailure =
     saveFailure &&
@@ -563,6 +627,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       hasDirtyTabs,
       dirtyTabCount,
       openFile,
+      createUntitledFile,
       closeTab,
       closeAllTabs,
       reopenLastClosedTab,
@@ -576,6 +641,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       updateFileContent,
       saveActiveFile,
       saveActiveFileAs,
+      isActiveFileUntitled,
     }),
     [
       openTabs,
@@ -590,6 +656,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       hasDirtyTabs,
       dirtyTabCount,
       openFile,
+      createUntitledFile,
       closeTab,
       closeAllTabs,
       reopenLastClosedTab,
@@ -600,6 +667,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       updateFileContent,
       saveActiveFile,
       saveActiveFileAs,
+      isActiveFileUntitled,
     ],
   );
 

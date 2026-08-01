@@ -73,6 +73,59 @@ describe('TabBar terminal action', () => {
     expect(onDropTerminal).toHaveBeenCalledWith('terminal-2');
   });
 
+  it('shows a drop target while a terminal session is dragged over the topbar', () => {
+    render(
+      <EditorProvider>
+        <TabBar />
+      </EditorProvider>,
+    );
+
+    const fileTabs = screen.getByRole('tablist', { name: 'Open files' });
+    const data = {
+      types: ['text/qedit-terminal'],
+      dropEffect: 'none',
+      getData: () => 'terminal-2',
+      setData: () => undefined,
+    } as unknown as DataTransfer;
+
+    fireEvent.dragEnter(fileTabs, { dataTransfer: data });
+
+    expect(fileTabs.className).toContain('bg-accent/10');
+  });
+
+  it('accepts the pointer-drag fallback used by desktop WebViews', () => {
+    const onDropTerminal = vi.fn();
+    render(
+      <EditorProvider>
+        <TabBar onDropTerminal={onDropTerminal} />
+      </EditorProvider>,
+    );
+
+    const fileTabs = screen.getByRole('tablist', { name: 'Open files' });
+    const dropTarget = fileTabs.parentElement;
+    expect(dropTarget).toBeTruthy();
+
+    const previousElementFromPoint = document.elementFromPoint;
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: () => dropTarget,
+    });
+
+    try {
+      window.dispatchEvent(
+        new CustomEvent('qedit:terminal-pointer-drag', {
+          detail: { id: 'terminal-2', phase: 'drop', x: 10, y: 10 },
+        }),
+      );
+      expect(onDropTerminal).toHaveBeenCalledWith('terminal-2');
+    } finally {
+      Object.defineProperty(document, 'elementFromPoint', {
+        configurable: true,
+        value: previousElementFromPoint,
+      });
+    }
+  });
+
   it('offers a direct editor-area terminal affordance', () => {
     const onOpenTerminalEditor = vi.fn();
 
@@ -96,6 +149,7 @@ describe('TabBar terminal action', () => {
       <EditorProvider>
         <TabBar
           terminalEditorVisible
+          terminalEditorId="terminal-2"
           onCloseTerminalEditor={onCloseTerminalEditor}
         />
       </EditorProvider>,
@@ -104,6 +158,7 @@ describe('TabBar terminal action', () => {
     expect(
       screen.getByRole('tab', { name: 'Terminal editor tab' }),
     ).toBeTruthy();
+    expect(screen.getByText('Terminal 2')).toBeTruthy();
 
     fireEvent.click(
       screen.getByRole('button', { name: 'Close terminal editor tab' }),

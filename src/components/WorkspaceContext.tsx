@@ -23,7 +23,6 @@ import {
   openNativeFolder,
   readWorkspaceDirectory,
   readWorkspaceFiles,
-  createNativeFile,
   renameNativeFile,
   removeNativeFile,
   type WorkspaceEntry,
@@ -47,7 +46,6 @@ interface WorkspaceContextValue {
   openWorkspaceFile: (filePath: string, displayName?: string) => Promise<void>;
   openRecentProject: (projectPath: string) => Promise<void>;
   registerEntries: (entries: WorkspaceEntry[], sourceRoot: string) => void;
-  createFile: () => Promise<void>;
   renameFile: (filePath: string, nextName: string) => Promise<void>;
   deleteFile: (filePath: string) => Promise<void>;
   discoverWorkspaceFiles: () => Promise<void>;
@@ -274,28 +272,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const createFile = useCallback(async () => {
-    const root = workspaceRootRef.current;
-    if (!root) {
-      setError('Open a folder before creating a file.');
-
-      return;
-    }
-
-    setError(null);
-
-    try {
-      const filePath = await createNativeFile(root);
-      if (!filePath) return;
-
-      await refreshWorkspace();
-      openFile(filePath, basenameFromPath(filePath));
-      refreshRecent();
-    } catch (cause) {
-      setError(errorMessage(cause));
-    }
-  }, [openFile, refreshRecent, refreshWorkspace]);
-
   const renameFile = useCallback(
     async (filePath: string, nextName: string) => {
       const root = workspaceRootRef.current;
@@ -389,7 +365,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       openWorkspaceFile,
       openRecentProject,
       registerEntries,
-      createFile,
       renameFile,
       deleteFile,
       discoverWorkspaceFiles,
@@ -410,7 +385,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       openWorkspaceFile,
       openRecentProject,
       registerEntries,
-      createFile,
       renameFile,
       deleteFile,
       discoverWorkspaceFiles,

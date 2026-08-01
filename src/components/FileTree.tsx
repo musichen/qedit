@@ -25,7 +25,7 @@ import {
   readWorkspaceDirectory,
 } from '#/lib/workspace-bridge';
 
-export function FileTree() {
+export function FileTree({ onNewFile }: { onNewFile: () => void }) {
   const { activeFilePath } = useEditor();
   const {
     workspaceRoot,
@@ -36,7 +36,6 @@ export function FileTree() {
     error,
     openFileDialog,
     openFolderDialog,
-    createFile,
     renameFile,
     deleteFile,
     refreshWorkspace,
@@ -76,7 +75,7 @@ export function FileTree() {
           <button
             type="button"
             className="rounded p-1 text-text-secondary hover:bg-hover hover:text-text-primary"
-            onClick={() => void createFile()}
+            onClick={onNewFile}
             aria-label="New file"
             title="New File in Workspace"
           >

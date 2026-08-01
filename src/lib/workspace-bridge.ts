@@ -194,56 +194,6 @@ export async function saveNativeFile(
   }
 }
 
-function assertWorkspacePath(path: string, workspaceRoot: string): string {
-  if (!isPathWithinHome(path, workspaceRoot)) {
-    throw new WorkspaceBridgeError(
-      'For safety, new files must stay inside the open workspace.',
-    );
-  }
-
-  if (normalizePath(path) === normalizePath(workspaceRoot)) {
-    throw new WorkspaceBridgeError('Choose a file name inside the workspace.');
-  }
-
-  return path;
-}
-
-/** Pick and create a new empty file inside the currently open workspace. */
-export async function createNativeFile(
-  workspaceRoot: string,
-): Promise<string | null> {
-  const selected = await saveNativeFile(
-    `${workspaceRoot}/untitled.md`,
-    'New File',
-  );
-
-  if (!selected) return null;
-
-  const path = assertWorkspacePath(selected, workspaceRoot);
-
-  try {
-    const { exists } = await import('@tauri-apps/plugin-fs');
-
-    if (await exists(path)) {
-      throw new WorkspaceBridgeError(
-        `A file named ${basenameFromPath(path)} already exists.`,
-      );
-    }
-
-    const { writeTextFile } = await import('@tauri-apps/plugin-fs');
-    await writeTextFile(path, '');
-
-    return path;
-  } catch (cause) {
-    if (cause instanceof WorkspaceBridgeError) throw cause;
-
-    throw new WorkspaceBridgeError(
-      `Could not create ${path}: ${errorMessage(cause)}`,
-      { cause },
-    );
-  }
-}
-
 export async function renameNativeFile(
   oldPath: string,
   newPath: string,

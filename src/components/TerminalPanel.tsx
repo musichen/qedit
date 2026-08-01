@@ -492,6 +492,54 @@ function TerminalTab({
           : 'text-text-secondary hover:bg-hover hover:text-text-primary'
       }`}
       onClick={onSelect}
+      onPointerDown={(event) => {
+        if (event.button !== 0 || isRenaming) return;
+
+        const startX = event.clientX;
+        const startY = event.clientY;
+        let moved = false;
+
+        const dispatchPointerDrag = (
+          phase: 'move' | 'drop',
+          point: PointerEvent,
+        ) => {
+          window.dispatchEvent(
+            new CustomEvent('qedit:terminal-pointer-drag', {
+              detail: {
+                id: tab.id,
+                phase,
+                x: point.clientX,
+                y: point.clientY,
+              },
+            }),
+          );
+        };
+        const cleanup = () => {
+          window.removeEventListener('pointermove', handleMove);
+          window.removeEventListener('pointerup', handleUp);
+          window.removeEventListener('pointercancel', cleanup);
+        };
+        const handleMove = (moveEvent: PointerEvent) => {
+          if (
+            !moved &&
+            Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) <
+              5
+          )
+            return;
+
+          moved = true;
+          moveEvent.preventDefault();
+          dispatchPointerDrag('move', moveEvent);
+        };
+        const handleUp = (upEvent: PointerEvent) => {
+          if (moved) dispatchPointerDrag('drop', upEvent);
+          cleanup();
+        };
+
+        window.addEventListener('pointermove', handleMove);
+        window.addEventListener('pointerup', handleUp);
+        window.addEventListener('pointercancel', cleanup);
+      }}
       onDoubleClick={(event) => {
         event.preventDefault();
         onRename();
