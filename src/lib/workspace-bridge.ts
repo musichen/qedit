@@ -104,6 +104,9 @@ async function selectedPath(options: {
       title: options.title,
       directory: options.directory,
       multiple: false,
+      ...(options.directory
+        ? {}
+        : { filters: [{ name: 'All Files', extensions: ['*'] }] }),
     });
 
     // Some macOS native dialog versions return a one-item array even when
