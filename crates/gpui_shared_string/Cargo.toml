@@ -1,0 +1,14 @@
+[package]
+name = "gpui_shared_string"
+version = "0.1.0"
+publish.workspace = true
+edition.workspace = true
+
+[lib]
+path = "gpui_shared_string.rs"
+
+[dependencies]
+gpui.workspace = true
+
+[lints]
+workspace = true

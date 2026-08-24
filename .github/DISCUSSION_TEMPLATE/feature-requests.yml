@@ -1,0 +1,44 @@
+body:
+  - type: markdown
+    attributes:
+      value: |
+        # Feature Request
+
+        Use this template to propose a new feature, workflow improvement, or product change for Qedit.
+
+        Start here before opening a feature PR so we can align on scope, product fit, and whether the idea belongs in Qedit, upstream Zed, or both.
+
+  - type: textarea
+    id: main
+    attributes:
+      label: Body
+      value: |
+        # What are you proposing?
+
+        Describe the feature, improvement, or change at a high level.
+
+        # Why does this matter for Qedit?
+
+        What problem does this solve in the browser, editor, terminal, or native tooling workflow?
+
+        What becomes easier or possible?
+
+        # Is this Qedit-specific, upstream-friendly, or both?
+
+        If this intentionally changes behavior inherited from Zed, explain why.
+
+        # Examples or context
+
+        Screenshots, mockups, workflows, or examples from other tools.
+
+        # Possible approach or constraints
+
+        If you have ideas about implementation, tradeoffs, or scope boundaries, include them here.
+
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        Keep requests concrete. The best discussions explain the user problem, the intended workflow, and whether the request is specific to Qedit as a fork.

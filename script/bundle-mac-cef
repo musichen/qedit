@@ -1,0 +1,309 @@
+#!/usr/bin/env bash
+
+# Bundle Qedit/Zed with CEF framework for macOS
+# This script creates a development .app bundle with CEF properly integrated
+# including the required helper app bundles for GPU, Renderer, etc.
+
+set -euo pipefail
+
+CEF_PATH="${CEF_PATH:-$HOME/.local/share/cef}"
+BUILD_TYPE="${1:-debug}"
+OPEN_AFTER_BUILD="${2:-false}"
+CARGO_CMD="${CARGO:-cargo}"
+
+# Validate CEF installation
+if [[ ! -d "$CEF_PATH" ]]; then
+    echo "Error: CEF not found at $CEF_PATH"
+    echo "Please run: cargo run -p export-cef-dir -- --force \$HOME/.local/share/cef"
+    echo "from the cef-rs repository first."
+    exit 1
+fi
+
+if [[ ! -d "$CEF_PATH/Chromium Embedded Framework.framework" ]]; then
+    echo "Error: CEF framework not found at $CEF_PATH/Chromium Embedded Framework.framework"
+    exit 1
+fi
+
+echo "Using CEF from: $CEF_PATH"
+
+# Determine build flags
+if [[ "$BUILD_TYPE" == "release" ]]; then
+    BUILD_FLAG="--release"
+    TARGET_DIR="release"
+else
+    BUILD_FLAG=""
+    TARGET_DIR="debug"
+    export CARGO_INCREMENTAL=true
+fi
+
+# Get architecture
+version_info=$(rustc --version --verbose)
+host_line=$(echo "$version_info" | grep host)
+target_triple=${host_line#*: }
+
+echo "Building for: $target_triple ($BUILD_TYPE)"
+echo "Using cargo command: $CARGO_CMD"
+
+# Build the main application
+echo "Building zed..."
+"$CARGO_CMD" build $BUILD_FLAG --features mimalloc --package zed --target $target_triple
+
+# Build the helper executable
+echo "Building qedit_helper..."
+"$CARGO_CMD" build $BUILD_FLAG --package browser --bin qedit_helper --target $target_triple
+
+# Set up paths
+BINARY_PATH="target/${target_triple}/${TARGET_DIR}/zed"
+HELPER_PATH="target/${target_triple}/${TARGET_DIR}/qedit_helper"
+BUNDLE_DIR="target/${target_triple}/${TARGET_DIR}/bundle"
+APP_NAME="Qedit"
+APP_PATH="${BUNDLE_DIR}/${APP_NAME}.app"
+
+# Create bundle structure
+echo "Creating application bundle at: $APP_PATH"
+rm -rf "$APP_PATH"
+mkdir -p "$APP_PATH/Contents/MacOS"
+mkdir -p "$APP_PATH/Contents/Frameworks"
+mkdir -p "$APP_PATH/Contents/Resources"
+
+# Copy the main executable
+cp "$BINARY_PATH" "$APP_PATH/Contents/MacOS/$APP_NAME"
+
+# Copy CEF framework
+echo "Copying CEF framework..."
+cp -R "$CEF_PATH/Chromium Embedded Framework.framework" "$APP_PATH/Contents/Frameworks/"
+
+# Copy component dylibs when present. Stock minimal CEF exports don't ship
+# separate top-level dylibs, while some custom builds do.
+CEF_COMPONENT_DYLIBS=()
+while IFS= read -r dylib; do
+    CEF_COMPONENT_DYLIBS+=("$dylib")
+done < <(find "$CEF_PATH" -maxdepth 1 -type f -name "*.dylib" | sort)
+DYLIB_COUNT="${#CEF_COMPONENT_DYLIBS[@]}"
+if [[ "$DYLIB_COUNT" -gt 0 ]]; then
+    echo "Copying $DYLIB_COUNT CEF component dylibs..."
+    cp "${CEF_COMPONENT_DYLIBS[@]}" "$APP_PATH/Contents/Frameworks/"
+fi
+
+# Helper types required by CEF
+HELPERS=("Helper" "Helper (GPU)" "Helper (Renderer)" "Helper (Plugin)" "Helper (Alerts)")
+
+# Create helper app bundles
+echo "Creating helper app bundles..."
+for helper_suffix in "${HELPERS[@]}"; do
+    HELPER_APP_NAME="${APP_NAME} ${helper_suffix}"
+    HELPER_APP_PATH="$APP_PATH/Contents/Frameworks/${HELPER_APP_NAME}.app"
+
+    # Generate unique bundle identifier for each helper type
+    # Helper -> .helper, Helper (GPU) -> .helper.GPU, etc.
+    if [[ "$helper_suffix" == "Helper" ]]; then
+        BUNDLE_ID="dev.qedit.Qedit.helper"
+    else
+        # Extract type from "Helper (GPU)" -> "GPU"
+        HELPER_TYPE="${helper_suffix#Helper (}"
+        HELPER_TYPE="${HELPER_TYPE%)}"
+        BUNDLE_ID="dev.qedit.Qedit.helper.${HELPER_TYPE}"
+    fi
+
+    echo "  Creating: ${HELPER_APP_NAME}.app (${BUNDLE_ID})"
+    mkdir -p "$HELPER_APP_PATH/Contents/MacOS"
+
+    # Copy helper executable
+    cp "$HELPER_PATH" "$HELPER_APP_PATH/Contents/MacOS/${HELPER_APP_NAME}"
+
+    # Create helper Info.plist
+    cat > "$HELPER_APP_PATH/Contents/Info.plist" << HELPER_PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>${HELPER_APP_NAME}</string>
+    <key>CFBundleDisplayName</key>
+    <string>${HELPER_APP_NAME}</string>
+    <key>CFBundleIdentifier</key>
+    <string>${BUNDLE_ID}</string>
+    <key>CFBundleVersion</key>
+    <string>0.1.0</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleExecutable</key>
+    <string>${HELPER_APP_NAME}</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>11.0</string>
+    <key>LSUIElement</key>
+    <string>1</string>
+    <key>LSEnvironment</key>
+    <dict>
+        <key>MallocNanoZone</key>
+        <string>0</string>
+    </dict>
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
+</dict>
+</plist>
+HELPER_PLIST
+
+    # Create PkgInfo for helper
+    echo "APPL????" > "$HELPER_APP_PATH/Contents/PkgInfo"
+done
+
+# Create main Info.plist
+cat > "$APP_PATH/Contents/Info.plist" << 'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Qedit</string>
+    <key>CFBundleDisplayName</key>
+    <string>Qedit</string>
+    <key>CFBundleIdentifier</key>
+    <string>dev.qedit.Qedit</string>
+    <key>CFBundleVersion</key>
+    <string>0.1.0</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleExecutable</key>
+    <string>Qedit</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>11.0</string>
+    <key>CFBundleIconFile</key>
+    <string>app-icon</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
+    <key>LSEnvironment</key>
+    <dict>
+        <key>MallocNanoZone</key>
+        <string>0</string>
+    </dict>
+    <key>NSCameraUsageDescription</key>
+    <string>Qedit needs camera access for video features</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Qedit needs microphone access for audio features</string>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>Qedit needs Bluetooth access for browser features that interact with nearby devices</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>CFBundleURLName</key>
+            <string>Qedit</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>qedit</string>
+                <string>http</string>
+                <string>https</string>
+            </array>
+        </dict>
+    </array>
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.folder</string>
+                <string>public.plain-text</string>
+                <string>public.text</string>
+                <string>public.utf8-plain-text</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>HTML document</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.html</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>
+PLIST
+
+# Create PkgInfo
+echo "APPL????" > "$APP_PATH/Contents/PkgInfo"
+
+# Copy app icon (select based on release channel)
+echo "Creating app icon..."
+ICON_DIR="crates/zed/resources"
+RELEASE_CHANNEL="${RELEASE_CHANNEL:-dev}"
+case "$RELEASE_CHANNEL" in
+    stable)  ICON_SUFFIX="" ;;
+    preview) ICON_SUFFIX="-preview" ;;
+    nightly) ICON_SUFFIX="-nightly" ;;
+    *)       ICON_SUFFIX="-dev" ;;
+esac
+ICON_SRC="$ICON_DIR/app-icon${ICON_SUFFIX}"
+ICON_SRC_2X="${ICON_SRC}@2x.png"
+ICON_SRC_1X="${ICON_SRC}.png"
+echo "  Using icon source: $ICON_SRC_2X / $ICON_SRC_1X"
+
+ICONSET_DIR=$(mktemp -d)/app-icon.iconset
+mkdir -p "$ICONSET_DIR"
+cp "$ICON_SRC_1X" "$ICONSET_DIR/icon_512x512.png"
+cp "$ICON_SRC_2X" "$ICONSET_DIR/icon_512x512@2x.png"
+sips -z 256 256 "$ICON_SRC_2X" --out "$ICONSET_DIR/icon_256x256.png" > /dev/null
+sips -z 512 512 "$ICON_SRC_2X" --out "$ICONSET_DIR/icon_256x256@2x.png" > /dev/null
+sips -z 128 128 "$ICON_SRC_2X" --out "$ICONSET_DIR/icon_128x128.png" > /dev/null
+sips -z 256 256 "$ICON_SRC_2X" --out "$ICONSET_DIR/icon_128x128@2x.png" > /dev/null
+sips -z 32 32 "$ICON_SRC_2X" --out "$ICONSET_DIR/icon_32x32.png" > /dev/null
+sips -z 64 64 "$ICON_SRC_2X" --out "$ICONSET_DIR/icon_32x32@2x.png" > /dev/null
+sips -z 16 16 "$ICON_SRC_2X" --out "$ICONSET_DIR/icon_16x16.png" > /dev/null
+sips -z 32 32 "$ICON_SRC_2X" --out "$ICONSET_DIR/icon_16x16@2x.png" > /dev/null
+iconutil -c icns "$ICONSET_DIR" -o "$APP_PATH/Contents/Resources/app-icon.icns"
+echo "  Icon created at: $APP_PATH/Contents/Resources/app-icon.icns"
+
+# Ad-hoc code sign (required for running on macOS)
+echo "Code signing bundle..."
+# Sign component dylibs first (innermost)
+for dylib in "$APP_PATH/Contents/Frameworks"/*.dylib; do
+    [ -f "$dylib" ] && codesign --force --sign - "$dylib"
+done
+# Sign helpers (inside out)
+for helper_suffix in "${HELPERS[@]}"; do
+    HELPER_APP_NAME="${APP_NAME} ${helper_suffix}"
+    HELPER_APP_PATH="$APP_PATH/Contents/Frameworks/${HELPER_APP_NAME}.app"
+    codesign --force --sign - "$HELPER_APP_PATH"
+done
+# Sign framework
+codesign --force --sign - "$APP_PATH/Contents/Frameworks/Chromium Embedded Framework.framework"
+# Sign main app
+codesign --force --sign - "$APP_PATH"
+
+echo ""
+echo "=========================================="
+echo "Bundle created successfully!"
+echo "Location: $APP_PATH"
+echo "=========================================="
+echo ""
+echo "To run the app:"
+echo "  open \"$APP_PATH\""
+echo ""
+echo "Or from command line:"
+echo "  \"$APP_PATH/Contents/MacOS/$APP_NAME\""
+echo ""
+
+if [[ "$OPEN_AFTER_BUILD" == "true" ]] || [[ "$OPEN_AFTER_BUILD" == "-o" ]]; then
+    echo "Opening app..."
+    open "$APP_PATH"
+fi

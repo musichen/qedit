@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Failure modes:
+# - Local GPUI checkout is missing.
+# - Local GPUI checkout is not the expected repository layout.
+# - Cargo receives no subcommand and would fail with an opaque message.
+
+if [ "$#" -eq 0 ]; then
+    echo "Usage: script/cargo-gpui-local <cargo args...>" >&2
+    exit 1
+fi
+
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+gpui_root="${QEDIT_GPUI_PATH:-$repo_root/../gpui}"
+
+if [ ! -f "$gpui_root/crates/gpui/Cargo.toml" ]; then
+    echo "Local GPUI checkout not found at: $gpui_root" >&2
+    echo "Set QEDIT_GPUI_PATH=/absolute/path/to/gpui or clone Glass-HQ/gpui to ../gpui" >&2
+    exit 1
+fi
+
+config_file="$(mktemp)"
+trap 'rm -f "$config_file"' EXIT
+
+cat >"$config_file" <<EOF
+[patch."https://github.com/Glass-HQ/gpui.git"]
+collections = { path = "$gpui_root/crates/collections" }
+derive_refineable = { path = "$gpui_root/crates/refineable/derive_refineable" }
+gpui = { path = "$gpui_root/crates/gpui" }
+gpui_macos = { path = "$gpui_root/crates/gpui_macos" }
+gpui_macros = { path = "$gpui_root/crates/gpui_macros" }
+gpui_metal = { path = "$gpui_root/crates/gpui_metal" }
+gpui_platform = { path = "$gpui_root/crates/gpui_platform" }
+gpui_tokio = { path = "$gpui_root/crates/gpui_tokio" }
+gpui_util = { path = "$gpui_root/crates/gpui_util" }
+http_client = { path = "$gpui_root/crates/http_client" }
+http_client_tls = { path = "$gpui_root/crates/http_client_tls" }
+media = { path = "$gpui_root/crates/media" }
+refineable = { path = "$gpui_root/crates/refineable" }
+scheduler = { path = "$gpui_root/crates/scheduler" }
+sum_tree = { path = "$gpui_root/crates/sum_tree" }
+util = { path = "$gpui_root/crates/util" }
+EOF
+
+cd "$repo_root"
+exec cargo --config "$config_file" "$@"

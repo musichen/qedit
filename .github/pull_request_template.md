@@ -1,16 +1,13 @@
-## Description
+Self-Review Checklist:
 
-<!-- Briefly describe what this PR does and why. -->
+- [ ] I've reviewed my own diff for quality, security, and reliability
+- [ ] Unsafe blocks (if any) have justifying comments
+- [ ] The content is consistent with the [UI/UX checklist](https://github.com/zed-industries/zed/blob/main/CONTRIBUTING.md#uiux-checklist)
+- [ ] Tests cover the new/changed behavior
+- [ ] Performance impact has been considered and is acceptable
 
-## Type of change
+Closes #ISSUE
 
-- [ ] Bug fix
-- [ ] New feature
-- [ ] Documentation / tooling
-- [ ] Refactor
+Release Notes:
 
-## Checklist
-
-- [ ] `pnpm run check` passes locally
-- [ ] Tests added/updated as needed
-- [ ] No new lint or type errors
+- N/A or Added/Fixed/Improved ...

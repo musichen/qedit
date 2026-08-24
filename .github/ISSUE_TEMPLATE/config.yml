@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://www.schemastore.org/github-issue-config.json
+blank_issues_enabled: false
+contact_links:
+  - name: Feature request
+    url: https://github.com/musichen/qedit/discussions/new/choose
+    about: Propose product ideas or workflow changes in Discussions before opening a feature PR.
+  - name: Questions and support
+    url: https://github.com/musichen/qedit/discussions
+    about: Ask setup questions, share context, or start an open-ended discussion with the team.

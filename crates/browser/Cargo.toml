@@ -1,0 +1,57 @@
+[package]
+name = "browser"
+version = "0.1.0"
+edition.workspace = true
+publish.workspace = true
+license = "GPL-3.0-or-later"
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/browser.rs"
+doctest = false
+
+[[bin]]
+name = "qedit_helper"
+path = "src/bin/qedit_helper.rs"
+
+[features]
+test-support = ["gpui/test-support"]
+
+[dependencies]
+anyhow.workspace = true
+db.workspace = true
+editor.workspace = true
+fuzzy.workspace = true
+gpui.workspace = true
+menu.workspace = true
+paths.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+ui.workspace = true
+theme.workspace = true
+toast.workspace = true
+settings.workspace = true
+util.workspace = true
+workspace_chrome.workspace = true
+workspace_modes.workspace = true
+workspace.workspace = true
+zed_actions.workspace = true
+
+# CEF browser integration
+cef = { git = "https://github.com/tauri-apps/cef-rs", tag = "cef-v145.6.1+145.0.28", default-features = false }
+parking_lot.workspace = true
+image.workspace = true
+log.workspace = true
+smallvec.workspace = true
+url.workspace = true
+
+# GPU-accelerated rendering (IOSurface → CVPixelBuffer → GPUI Surface)
+[dev-dependencies]
+gpui = { workspace = true, features = ["test-support"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-video.workspace = true
+io-surface.workspace = true
+core-foundation.workspace = true

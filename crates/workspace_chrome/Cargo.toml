@@ -1,0 +1,18 @@
+[package]
+name = "workspace_chrome"
+version = "0.1.0"
+edition.workspace = true
+publish.workspace = true
+license = "GPL-3.0-or-later"
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/workspace_chrome.rs"
+doctest = false
+
+[dependencies]
+gpui.workspace = true
+ui.workspace = true
+workspace_modes.workspace = true

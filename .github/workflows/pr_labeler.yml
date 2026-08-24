@@ -1,0 +1,90 @@
+# Labels pull requests for lightweight Qedit contributor routing.
+name: PR Labeler
+
+on:
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  check-authorship-and-label:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - id: apply-authorship-label
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const BOT_LABEL = 'bot';
+            const FIRST_CONTRIBUTION_LABEL = 'first contribution';
+            const KNOWN_ASSOCIATIONS = ['CONTRIBUTOR', 'COLLABORATOR', 'MEMBER', 'OWNER', 'MANNEQUIN'];
+
+            async function ensureLabel(name, color, description) {
+              try {
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name,
+                  color,
+                  description,
+                });
+              } catch (error) {
+                if (error.status !== 422) {
+                  throw error;
+                }
+              }
+            }
+
+            const pr = context.payload.pull_request;
+            const author = pr.user.login;
+
+            if (pr.user.type === 'Bot') {
+              await ensureLabel(BOT_LABEL, '5319e7', 'Opened by an automation account');
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                labels: [BOT_LABEL]
+              });
+              console.log(`PR #${pr.number} by ${author}: labeled '${BOT_LABEL}' (user type: '${pr.user.type}')`);
+              return;
+            }
+
+            const association = pr.author_association;
+            let isTrustedCollaborator = false;
+            try {
+              const permission = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: author,
+              });
+              isTrustedCollaborator = ['admin', 'maintain', 'write', 'triage'].includes(permission.data.permission);
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+            }
+
+            if (isTrustedCollaborator) {
+              console.log(`PR #${pr.number} by ${author}: not a first-time contributor (trusted collaborator permission)`);
+              return;
+            }
+
+            if (KNOWN_ASSOCIATIONS.includes(association)) {
+              console.log(`PR #${pr.number} by ${author}: not a first-time contributor (association: '${association}')`);
+              return;
+            }
+
+            await ensureLabel(FIRST_CONTRIBUTION_LABEL, '7057ff', 'Opened by a first-time contributor');
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              labels: [FIRST_CONTRIBUTION_LABEL]
+            });
+            console.log(`PR #${pr.number} by ${author}: labeled '${FIRST_CONTRIBUTION_LABEL}' (association: '${association}')`);

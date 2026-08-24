@@ -1,0 +1,60 @@
+name: Report a crash
+description: Qedit is crashing, freezing, or hanging.
+type: Bug
+labels: "bug"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If you can reproduce this reliably, include the shortest sequence that triggers it. Crashes that only happen with one site, repository, or action flow are still useful if that context is included.
+  - type: textarea
+    attributes:
+      label: Reproduction steps
+      description: A step-by-step description of how to reproduce the crash from a clean Qedit install or minimal project. The more context you provide, the easier it is to isolate the fault.
+      placeholder: |
+        1. Start Qedit
+        2. Perform an action
+        3. Qedit crashes
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: What happened right before the crash?
+      description: Include the active tab type, site or repo involved, background tasks, and whether the app recovered or had to be force-quit.
+      placeholder: |
+        - I was in:
+        - I clicked / ran:
+        - The window froze / quit / stopped repainting:
+        - I had to force quit: yes/no
+    validations:
+      required: false
+  - type: textarea
+    attributes:
+      label: Qedit version and system specs
+      description: |
+        Open the command palette in Qedit, then run `zed: copy system specs into clipboard`.
+      placeholder: |
+        Qedit: dev build / release build / commit if known
+        OS: macOS 15.1
+        Memory: 36 GiB
+        Architecture: aarch64
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Attach Qedit log file
+      description: |
+        Open the command palette in Qedit, then run `zed: open log` to inspect the recent log output. You can also run `zed: reveal log in file manager` to locate the file itself.
+
+        ⚠️ **Please review your log file for secrets (API keys, tokens, etc.) and partially or fully redact them before posting.**
+      value: |
+        <details><summary>Qedit.log</summary>
+
+        <!-- Paste your log inside the code block. -->
+        ```log
+
+        ```
+
+        </details>
+    validations:
+      required: false
