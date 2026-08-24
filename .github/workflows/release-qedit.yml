@@ -133,6 +133,8 @@ jobs:
   windows:
     name: Windows x64
     runs-on: windows-2022
+    env:
+      CARGO_HOME: D:/cargo
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
