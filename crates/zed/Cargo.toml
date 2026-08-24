@@ -121,7 +121,6 @@ system_specs.workspace = true
 gpui = { workspace = true, features = [
     "font-kit",
     "screen-capture",
-    "wayland",
     "windows-manifest",
     "x11",
 ] }
