@@ -160,7 +160,7 @@ impl Render for DockButtonBar {
                 .on_click({
                     let workspace = self.workspace.clone();
                     #[cfg(not(target_os = "macos"))]
-                    let multi_workspace = multi_workspace.cloned();
+                    let multi_workspace = multi_workspace.clone();
                     move |_, window, cx| {
                         #[cfg(not(target_os = "macos"))]
                         if let Some(multi_workspace) = multi_workspace.as_ref() {
