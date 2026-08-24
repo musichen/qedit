@@ -1,0 +1,174 @@
+name: Release Qedit
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version"
+        required: true
+        default: "1.0.1"
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
+
+jobs:
+  macos:
+    name: macOS ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            target: aarch64-apple-darwin
+            runner: macos-14
+          - arch: x86_64
+            target: x86_64-apple-darwin
+            runner: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-macos-${{ matrix.target }}
+      - name: Build Qedit
+        run: cargo build --release --features mimalloc --package zed --package cli --target ${{ matrix.target }}
+      - name: Package app
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="target/${{ matrix.target }}/release"
+          app="$root/Qedit.app"
+          mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+          cp "$root/zed" "$app/Contents/MacOS/Qedit"
+          cat > "$app/Contents/Info.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+          <key>CFBundleName</key><string>Qedit</string>
+          <key>CFBundleDisplayName</key><string>Qedit</string>
+          <key>CFBundleExecutable</key><string>Qedit</string>
+          <key>CFBundleIdentifier</key><string>dev.qedit.Qedit</string>
+          <key>CFBundlePackageType</key><string>APPL</string>
+          <key>CFBundleShortVersionString</key><string>${RELEASE_VERSION#v}</string>
+          <key>CFBundleVersion</key><string>${RELEASE_VERSION#v}</string>
+          <key>LSMinimumSystemVersion</key><string>10.15.7</string>
+          <key>CFBundleURLTypes</key><array><dict><key>CFBundleURLSchemes</key><array><string>qedit</string></array></dict></array>
+          </dict></plist>
+          PLIST
+          ditto -c -k --sequesterRsrc --keepParent "$app" "Qedit-${RELEASE_VERSION#v}-macos-${{ matrix.arch }}.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Qedit-${{ env.RELEASE_VERSION }}-macos-${{ matrix.arch }}
+          path: Qedit-*-macos-${{ matrix.arch }}.zip
+
+  linux:
+    name: Linux ${{ matrix.arch }} DEB
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-linux-${{ matrix.arch }}
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang lld dpkg-dev pkg-config libx11-dev libwayland-dev libxkbcommon-dev libudev-dev libfontconfig1-dev libasound2-dev
+      - name: Build Qedit
+        run: cargo build --release --features mimalloc --package zed --package cli
+      - name: Build Debian package
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_VERSION#v}"
+          package="qedit_${version}_${{ matrix.arch }}"
+          mkdir -p "$package/DEBIAN" "$package/usr/bin" "$package/usr/share/applications" "$package/usr/share/doc/qedit"
+          install -m 0755 target/release/zed "$package/usr/bin/qedit"
+          install -m 0755 target/release/cli "$package/usr/bin/qedit-cli"
+          cat > "$package/DEBIAN/control" <<CONTROL
+          Package: qedit
+          Version: $version
+          Section: editors
+          Priority: optional
+          Architecture: ${{ matrix.arch }}
+          Maintainer: Qedit contributors
+          Description: Qedit browser, code editor, and terminal
+           Qedit is a fast development environment for focused work.
+          CONTROL
+          cat > "$package/usr/share/applications/qedit.desktop" <<DESKTOP
+          [Desktop Entry]
+          Name=Qedit
+          Comment=Browser, code editor, and terminal
+          Exec=qedit %U
+          Terminal=false
+          Type=Application
+          Categories=Development;TextEditor;
+          MimeType=text/plain;inode/directory;
+          DESKTOP
+          cp LICENSE-GPL "$package/usr/share/doc/qedit/copyright"
+          dpkg-deb --build --root-owner-group "$package" "Qedit-${version}-linux-${{ matrix.arch }}.deb"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Qedit-${{ env.RELEASE_VERSION }}-linux-${{ matrix.arch }}
+          path: Qedit-*.deb
+
+  windows:
+    name: Windows x64
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-windows-x86_64
+      - name: Build Qedit
+        run: cargo build --release --features mimalloc --package zed --package cli
+      - name: Package Qedit
+        shell: pwsh
+        run: |
+          $version = "${env:RELEASE_VERSION}".TrimStart('v')
+          New-Item -ItemType Directory -Force -Path package | Out-Null
+          Copy-Item target/release/zed.exe package/Qedit.exe
+          Copy-Item target/release/cli.exe package/qedit-cli.exe
+          Copy-Item LICENSE-GPL package/LICENSE-GPL
+          Compress-Archive -Path package/* -DestinationPath "Qedit-$version-windows-x86_64.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Qedit-${{ env.RELEASE_VERSION }}-windows-x86_64
+          path: Qedit-*.zip
+
+  publish:
+    name: Publish GitHub release
+    needs: [macos, linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: Qedit-*
+          merge-multiple: true
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${RELEASE_VERSION#v}"
+          tag="v$version"
+          gh release create "$tag" artifacts/* --repo "$GITHUB_REPOSITORY" --title "Qedit $version" --generate-notes

@@ -2,7 +2,7 @@
 description = "Qedit - A high-performance code editor"
 edition.workspace = true
 name = "zed"
-version = "0.233.0"
+version = "1.0.1"
 publish.workspace = true
 license = "GPL-3.0-or-later"
 authors = ["Qedit HQ <team@qedit.dev>"]

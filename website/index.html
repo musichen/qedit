@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Qedit documentation - a fast browser, code editor, and terminal.">
+  <title>Qedit Documentation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body x-data="docsApp()" @keydown.window="handleKeydown($event)">
+  <div class="app-shell">
+    <aside class="sidebar" :class="{ 'is-open': mobileMenu }" aria-label="Documentation navigation">
+      <div class="brand-row">
+        <a class="brand" href="#top" @click="mobileMenu = false" aria-label="Qedit documentation home">
+          <span class="brand-mark">q</span><span>Qedit</span>
+        </a>
+        <button class="icon-button mobile-only" @click="mobileMenu = false" aria-label="Close navigation">×</button>
+      </div>
+      <div class="sidebar-caption">Documentation <span>1.0.1</span></div>
+      <button class="search-trigger" @click="openSearch()" aria-label="Search documentation">
+        <span class="search-icon">⌕</span><span>Search docs</span><kbd>⌘ K</kbd>
+      </button>
+      <nav class="nav-list">
+        <template x-for="section in sections" :key="section.id">
+          <div class="nav-group">
+            <div class="nav-heading" x-text="section.label"></div>
+            <template x-for="item in section.items" :key="item.id">
+              <a class="nav-link" :href="'#' + item.id" :class="{ active: activeSection === item.id }" @click="mobileMenu = false" x-text="item.title"></a>
+            </template>
+          </div>
+        </template>
+      </nav>
+      <div class="sidebar-footer">
+        <a href="https://github.com/musichen/qedit" target="_blank" rel="noreferrer">GitHub <span>↗</span></a>
+        <a href="https://github.com/musichen/qedit/releases" target="_blank" rel="noreferrer">Releases <span>↗</span></a>
+      </div>
+    </aside>
+
+    <div class="backdrop" :class="{ visible: mobileMenu }" @click="mobileMenu = false"></div>
+    <main class="content" id="top">
+      <header class="topbar">
+        <button class="icon-button mobile-only" @click="mobileMenu = true" aria-label="Open navigation">☰</button>
+        <div class="breadcrumbs"><span>Qedit</span><b>/</b><span>Documentation</span></div>
+        <div class="top-actions"><a href="https://github.com/musichen/qedit" target="_blank" rel="noreferrer">GitHub ↗</a><a class="release-pill" href="https://github.com/musichen/qedit/releases">v1.0.1</a></div>
+      </header>
+
+      <article class="article">
+        <section class="hero">
+          <div class="eyebrow">QEDIT / DOCUMENTATION</div>
+          <h1>Build in one<br><em>focused space.</em></h1>
+          <p class="hero-copy">Qedit brings your browser, code editor, and terminal together in a fast, native development environment.</p>
+          <div class="hero-actions"><a class="button primary" href="#getting-started">Get started <span>→</span></a><a class="button secondary" href="https://github.com/musichen/qedit/releases">Download v1.0.1</a></div>
+        </section>
+
+        <div class="notice"><span class="notice-dot"></span><div><strong>Qedit 1.0.1 is available.</strong> <a href="https://github.com/musichen/qedit/releases">Download the latest release</a> for macOS, Linux, or Windows.</div></div>
+
+        <section class="doc-section" id="getting-started" data-section="getting-started">
+          <div class="section-kicker">01 / START HERE</div><h2>Getting started</h2>
+          <p>Install Qedit, open a project, and keep your entire workflow within reach.</p>
+          <div class="card-grid two">
+            <a class="doc-card" href="https://github.com/musichen/qedit/blob/main/docs/src/installation.md"><span class="card-icon">↓</span><span><strong>Installation</strong><small>Set up Qedit on your machine.</small></span><b>→</b></a>
+            <a class="doc-card" href="https://github.com/musichen/qedit/blob/main/docs/src/quick-start.md"><span class="card-icon">✦</span><span><strong>Quick start</strong><small>Learn the essential workflow.</small></span><b>→</b></a>
+          </div>
+        </section>
+
+        <section class="doc-section" id="editing" data-section="editing">
+          <div class="section-kicker">02 / CORE WORKFLOW</div><h2>Editing and navigation</h2>
+          <p>Move through code quickly with an editor designed around keyboard-first workflows.</p>
+          <div class="card-grid three">
+            <a class="doc-card compact" href="https://github.com/musichen/qedit/blob/main/docs/src/editing-code.md"><span class="card-icon">⌘</span><span><strong>Editing code</strong><small>Buffers, selections, and actions.</small></span></a>
+            <a class="doc-card compact" href="https://github.com/musichen/qedit/blob/main/docs/src/key-bindings.md"><span class="card-icon">⌨</span><span><strong>Key bindings</strong><small>Make the editor yours.</small></span></a>
+            <a class="doc-card compact" href="https://github.com/musichen/qedit/blob/main/docs/src/terminal.md"><span class="card-icon">&gt;_</span><span><strong>Terminal</strong><small>Run commands beside your code.</small></span></a>
+          </div>
+        </section>
+
+        <section class="doc-section" id="customize" data-section="customize">
+          <div class="section-kicker">03 / MAKE IT YOURS</div><h2>Customize Qedit</h2>
+          <p>Configure appearance, languages, extensions, and project behavior to match your work.</p>
+          <div class="link-list">
+            <a href="https://github.com/musichen/qedit/blob/main/docs/src/appearance.md"><span>Appearance and themes</span><b>→</b></a>
+            <a href="https://github.com/musichen/qedit/blob/main/docs/src/configuring-languages.md"><span>Language configuration</span><b>→</b></a>
+            <a href="https://github.com/musichen/qedit/blob/main/docs/src/extensions.md"><span>Extensions</span><b>→</b></a>
+            <a href="https://github.com/musichen/qedit/blob/main/docs/src/reference/all-settings.md"><span>All settings reference</span><b>→</b></a>
+          </div>
+        </section>
+
+        <section class="doc-section" id="development" data-section="development">
+          <div class="section-kicker">04 / BUILD FROM SOURCE</div><h2>Development</h2>
+          <p>Qedit is open source and welcomes improvements across the editor, platform integrations, and documentation.</p>
+          <div class="code-block"><div class="code-top"><span>Terminal</span><button @click="copyCommand()" x-text="copied ? 'Copied' : 'Copy'"></button></div><code><span class="prompt">$</span> git clone https://github.com/musichen/qedit.git<br><span class="prompt">$</span> cd qedit<br><span class="prompt">$</span> cargo run -p zed</code></div>
+          <a class="text-link" href="https://github.com/musichen/qedit/blob/main/docs/src/development.md">Read the development guide →</a>
+        </section>
+
+        <footer class="article-footer"><span>Qedit Documentation</span><span>Built for focused work.</span></footer>
+      </article>
+    </main>
+  </div>
+
+  <div class="search-modal" x-show="searchOpen" x-cloak x-transition.opacity @click.self="searchOpen = false">
+    <div class="search-panel" @click.stop>
+      <div class="search-input-wrap"><span>⌕</span><input x-ref="searchInput" x-model="query" @keydown.escape="searchOpen = false" placeholder="Search documentation..." aria-label="Search documentation"><kbd>ESC</kbd></div>
+      <div class="search-results" x-show="query.length > 0">
+        <template x-for="result in searchResults" :key="result.id"><a class="result" :href="result.href || '#' + result.id" @click="searchOpen = false; query = ''"><span class="result-type" x-text="result.section"></span><strong x-text="result.title"></strong><small x-text="result.description"></small></a></template>
+        <div class="empty-search" x-show="searchResults.length === 0">No matching documentation found.</div>
+      </div>
+      <div class="search-hint" x-show="query.length === 0">Search sections, commands, and topics across Qedit documentation.</div>
+    </div>
+  </div>
+</body>
+</html>
