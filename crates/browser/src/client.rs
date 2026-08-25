@@ -3,6 +3,8 @@
 //! Provides the Client that CEF uses to communicate with the browser.
 //! Ties together the render, load, display, life span, and keyboard handlers.
 
+#[cfg(target_os = "linux")]
+use cef::sys::XEvent;
 #[cfg(target_os = "windows")]
 use cef::sys::tagMSG;
 use cef::{
@@ -37,7 +39,9 @@ pub(crate) static MANUAL_KEY_EVENT: AtomicBool = AtomicBool::new(false);
 
 #[cfg(target_os = "windows")]
 type KeyboardOsEvent<'a> = Option<&'a mut tagMSG>;
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "linux")]
+type KeyboardOsEvent<'a> = Option<&'a mut XEvent>;
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
 type KeyboardOsEvent<'a> = *mut u8;
 
 #[derive(Clone)]
