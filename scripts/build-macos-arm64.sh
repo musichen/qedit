@@ -8,6 +8,7 @@ app="$target_dir/Qedit.app"
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" dist
 cp "$target_dir/zed" "$app/Contents/MacOS/Qedit"
+cp crates/zed/resources/Qedit.icns "$app/Contents/Resources/Qedit.icns"
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -17,6 +18,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
 <key>CFBundleExecutable</key><string>Qedit</string>
 <key>CFBundleIdentifier</key><string>dev.qedit.Qedit</string>
 <key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleIconFile</key><string>Qedit.icns</string>
 <key>CFBundleShortVersionString</key><string>$version</string>
 <key>CFBundleVersion</key><string>$version</string>
 </dict></plist>

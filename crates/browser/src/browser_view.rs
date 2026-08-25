@@ -36,7 +36,9 @@ use workspace::{
     Workspace,
     item::{Item, ItemEvent, TabTooltipContent, WorkspaceItemKind},
 };
-use workspace_modes::{ModeId, ModeNavigationEntry, ModeViewRegistry};
+use workspace_modes::ModeNavigationEntry;
+#[cfg(not(target_os = "macos"))]
+use workspace_modes::{ModeId, ModeViewRegistry};
 
 const MAX_CLOSED_TABS: usize = 20;
 

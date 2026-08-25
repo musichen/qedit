@@ -1,6 +1,6 @@
 use crate::browser_view::BrowserView;
 use crate::history::HistoryMatch;
-use editor::Editor;
+use editor::{Editor, EditorElement, EditorStyle};
 use gpui::{
     App, Entity, Focusable, InteractiveElement, IntoElement, ParentElement, SharedString, Styled,
     Window, div, prelude::*, px, rems,
@@ -61,7 +61,13 @@ pub fn render_new_tab_page(
                 .overflow_hidden()
                 .text_size(rems(1.0))
                 .text_color(theme.colors().text)
-                .child(search_editor.clone()),
+                .child(EditorElement::new(
+                    &search_editor,
+                    EditorStyle {
+                        background: theme.colors().editor_background,
+                        ..EditorStyle::default()
+                    },
+                )),
         );
 
     let dropdown = if !is_focused || row_count == 0 {

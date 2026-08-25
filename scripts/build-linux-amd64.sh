@@ -5,9 +5,10 @@ version="${QEDIT_VERSION:-1.0.1}"
 cargo build --release --features mimalloc --package zed --package cli
 package="qedit_${version}_amd64"
 rm -rf "$package"
-mkdir -p "$package/DEBIAN" "$package/usr/bin"
+mkdir -p "$package/DEBIAN" "$package/usr/bin" "$package/usr/share/icons/hicolor/512x512/apps"
 install -m 0755 target/release/zed "$package/usr/bin/qedit"
 install -m 0755 target/release/cli "$package/usr/bin/qedit-cli"
+install -m 0644 icon.png "$package/usr/share/icons/hicolor/512x512/apps/qedit.png"
 cat > "$package/DEBIAN/control" <<CONTROL
 Package: qedit
 Version: $version

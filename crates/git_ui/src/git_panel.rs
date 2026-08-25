@@ -1,12 +1,14 @@
 use crate::askpass_modal::AskPassModal;
+#[cfg(not(target_os = "macos"))]
 use crate::branch_picker;
-use crate::repository_selector::RepositorySelector;
 use crate::commit_modal::CommitModal;
 use crate::commit_tooltip::CommitTooltip;
 use crate::commit_view::CommitView;
 use crate::git_panel_settings::GitPanelScrollbarAccessor;
 use crate::project_diff::{self, BranchDiff, Diff, ProjectDiff};
 use crate::remote_output::{self, RemoteAction, SuccessMessage};
+#[cfg(not(target_os = "macos"))]
+use crate::repository_selector::RepositorySelector;
 use crate::{
     file_history_view::FileHistoryView, git_panel_settings::GitPanelSettings, git_status_icon,
 };
@@ -5918,6 +5920,7 @@ impl RenderOnce for PanelRepoFooter {
             .as_ref()
             .map(|panel| panel.read(cx).project.clone());
 
+        #[cfg(not(target_os = "macos"))]
         let (workspace, repo) = self
             .git_panel
             .as_ref()
