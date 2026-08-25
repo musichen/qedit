@@ -23,6 +23,8 @@ cat > "$app/Contents/Info.plist" <<PLIST
 <key>CFBundleVersion</key><string>$version</string>
 </dict></plist>
 PLIST
-ln -s /Applications "$target_dir/Applications"
-hdiutil create -volname Qedit -srcfolder "$target_dir" -ov -format UDZO "dist/Qedit-$version-macos-x86_64.dmg"
-rm "$target_dir/Applications"
+stage=$(mktemp -d)
+cp -R "$app" "$stage/Qedit.app"
+ln -s /Applications "$stage/Applications"
+hdiutil create -volname Qedit -srcfolder "$stage" -ov -format UDZO "dist/Qedit-$version-macos-x86_64.dmg"
+rm -rf "$stage"
