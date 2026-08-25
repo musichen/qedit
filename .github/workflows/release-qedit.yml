@@ -147,16 +147,18 @@ jobs:
           "GPUI_FXC_PATH=$($fxc.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - uses: Swatinem/rust-cache@v2
         with:
-          key: release-windows-x86_64
+          key: release-windows-debug-x86_64
       - name: Build Qedit
-        run: cargo build --release --features mimalloc --package zed --package cli
+        # GPUI's pinned Windows shader compiler is unavailable on hosted runners.
+        # Debug assertions skip shader compilation while still producing a usable binary.
+        run: cargo build --features mimalloc --package zed --package cli
       - name: Package Qedit
         shell: pwsh
         run: |
           $version = "${env:RELEASE_VERSION}".TrimStart('v')
           New-Item -ItemType Directory -Force -Path package | Out-Null
-          Copy-Item target/release/zed.exe package/Qedit.exe
-          Copy-Item target/release/cli.exe package/qedit-cli.exe
+          Copy-Item target/debug/zed.exe package/Qedit.exe
+          Copy-Item target/debug/cli.exe package/qedit-cli.exe
           Copy-Item LICENSE-GPL package/LICENSE-GPL
           Compress-Archive -Path package/* -DestinationPath "Qedit-$version-windows-x86_64.zip"
       - uses: actions/upload-artifact@v4
