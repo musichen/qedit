@@ -5,7 +5,9 @@ ruby -e 'require "yaml"; YAML.load_file(".github/workflows/release-qedit.yml")'
 for script in scripts/*.sh; do
   bash -n "$script"
 done
+cargo metadata --locked --no-deps --format-version 1 >/dev/null
 cargo check --locked --release --features mimalloc --package zed --package cli
+cargo check --locked --package browser
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
   rustup target add x86_64-apple-darwin

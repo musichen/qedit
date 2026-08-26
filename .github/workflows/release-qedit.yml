@@ -21,8 +21,27 @@ env:
   RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
 
 jobs:
+  validate:
+    name: Validate release inputs
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Validate manifests, formatting, and build scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          ruby -e 'require "yaml"; YAML.load_file(".github/workflows/release-qedit.yml")'
+          bash -n scripts/build-macos-arm64.sh scripts/build-macos-x86_64.sh scripts/build-linux-amd64.sh scripts/build-linux-arm64.sh scripts/verify-release.sh
+          git diff --check HEAD^ HEAD
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          cargo check --locked --package browser
+
   macos:
-    name: macOS ${{ matrix.arch }}
+    name: macOS
+    needs: validate ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -63,6 +82,7 @@ jobs:
           set -euo pipefail
           root="target/${{ matrix.target }}/release"
           app="$root/Qedit.app"
+          rm -rf "$app"
           mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "$app/Contents/Frameworks"
           cp "$root/zed" "$app/Contents/MacOS/Qedit"
           cp crates/zed/resources/Qedit.icns "$app/Contents/Resources/Qedit.icns"
@@ -125,7 +145,8 @@ jobs:
           path: Qedit-*-macos-${{ matrix.arch }}.zip
 
   linux:
-    name: Linux ${{ matrix.arch }} DEB
+    name: Linux
+    needs: validate ${{ matrix.arch }} DEB
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -191,7 +212,8 @@ jobs:
           path: Qedit-*.deb
 
   windows:
-    name: Windows x64
+    name: Windows
+    needs: validate x64
     runs-on: windows-2022
     env:
       CARGO_HOME: 'D:\cargo'
@@ -229,7 +251,7 @@ jobs:
 
   publish:
     name: Publish GitHub release
-    needs: [macos, linux, windows]
+    needs: [validate, macos, linux, windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
