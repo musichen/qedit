@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ruby -e 'require "yaml"; YAML.load_file(".github/workflows/release-qedit.yml")'
+ruby -ryaml -e 'workflow = YAML.load_file(".github/workflows/release-qedit.yml"); jobs = workflow.fetch("jobs"); %w[validate macos linux windows publish].each { |job| abort("missing #{job} job") unless jobs.key?(job) }; %w[macos linux windows].each { |job| abort("#{job} must depend on validate") unless jobs.fetch(job).fetch("needs") == "validate" }'
 for script in scripts/*.sh; do
   bash -n "$script"
 done

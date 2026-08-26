@@ -33,15 +33,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ruby -e 'require "yaml"; YAML.load_file(".github/workflows/release-qedit.yml")'
+          ruby -ryaml -e 'workflow = YAML.load_file(".github/workflows/release-qedit.yml"); jobs = workflow.fetch("jobs"); %w[validate macos linux windows publish].each { |job| abort("missing #{job} job") unless jobs.key?(job) }; %w[macos linux windows].each { |job| abort("#{job} must depend on validate") unless jobs.fetch(job).fetch("needs") == "validate" }'
           bash -n scripts/build-macos-arm64.sh scripts/build-macos-x86_64.sh scripts/build-linux-amd64.sh scripts/build-linux-arm64.sh scripts/verify-release.sh
           git diff --check HEAD^ HEAD
           cargo metadata --locked --no-deps --format-version 1 >/dev/null
           cargo check --locked --package browser
 
   macos:
-    name: macOS
-    needs: validate ${{ matrix.arch }}
+    name: macOS ${{ matrix.arch }}
+    needs: validate
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -145,8 +145,8 @@ jobs:
           path: Qedit-*-macos-${{ matrix.arch }}.zip
 
   linux:
-    name: Linux
-    needs: validate ${{ matrix.arch }} DEB
+    name: Linux ${{ matrix.arch }} DEB
+    needs: validate
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -212,8 +212,8 @@ jobs:
           path: Qedit-*.deb
 
   windows:
-    name: Windows
-    needs: validate x64
+    name: Windows x64
+    needs: validate
     runs-on: windows-2022
     env:
       CARGO_HOME: 'D:\cargo'
