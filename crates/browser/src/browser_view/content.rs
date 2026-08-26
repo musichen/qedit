@@ -44,12 +44,37 @@ impl BrowserView {
                         div()
                             .text_color(theme.colors().text_muted)
                             .text_size(rems(0.875))
-                            .max_w(px(400.))
+                            .max_w(px(460.))
                             .text_center()
                             .child(
-                                "CEF is not initialized. Set CEF_PATH environment variable and restart.",
+                                "Qedit uses an embedded Chromium browser for web pages. When you continue, macOS may ask to create or use the Chromium Safe Storage keychain item. It only encrypts browser-profile data such as website sessions and tokens. Qedit cannot read your general Keychain.",
                             ),
-                    ),
+                    )
+                    .child(
+                        div()
+                            .id("enable-browser")
+                            .mt_2()
+                            .px_3()
+                            .py_1()
+                            .rounded_md()
+                            .bg(theme.colors().element_background)
+                            .text_color(theme.colors().text)
+                            .cursor_pointer()
+                            .on_click(cx.listener(|this, _, _window, cx| {
+                                this.enable_browser(cx);
+                            }))
+                            .child("Continue and enable Browser"),
+                    )
+                    .when_some(self.cef_initialization_error.as_ref(), |this, error| {
+                        this.child(
+                            div()
+                                .max_w(px(460.))
+                                .text_center()
+                                .text_size(rems(0.75))
+                                .text_color(theme.status().error)
+                                .child(error.clone()),
+                        )
+                    }),
             )
     }
 

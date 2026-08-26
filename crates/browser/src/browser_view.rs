@@ -176,6 +176,7 @@ pub struct BrowserView {
     history: Entity<BrowserHistory>,
     content_bounds: Bounds<Pixels>,
     cef_available: bool,
+    cef_initialization_error: Option<String>,
     is_tab_owner: bool,
     message_pump_started: bool,
     last_viewport: Option<(u32, u32, u32)>,
@@ -272,6 +273,7 @@ impl BrowserView {
             history,
             content_bounds: Bounds::default(),
             cef_available,
+            cef_initialization_error: None,
             is_tab_owner: false,
             message_pump_started: false,
             last_viewport: None,
@@ -323,24 +325,47 @@ impl BrowserView {
         };
 
         if cef_available {
-            if !this.is_incognito_window {
-                this.restore_downloads();
-            }
-            let already_restored = TABS_RESTORED.swap(true, Ordering::SeqCst);
-            this.is_tab_owner = !already_restored;
-            let restored = if !already_restored {
-                this.restore_tabs(cx)
-            } else {
-                this.restore_pinned_tabs(cx)
-            };
-            if !restored {
-                this.add_tab(cx);
-            }
-
-            this.sync_bookmark_bar_visibility(cx);
+            this.initialize_browser_state(cx);
         }
 
         this
+    }
+
+    fn initialize_browser_state(&mut self, cx: &mut Context<Self>) {
+        if !self.is_incognito_window {
+            self.restore_downloads();
+        }
+        let already_restored = TABS_RESTORED.swap(true, Ordering::SeqCst);
+        self.is_tab_owner = !already_restored;
+        let restored = if !already_restored {
+            self.restore_tabs(cx)
+        } else {
+            self.restore_pinned_tabs(cx)
+        };
+        if !restored {
+            self.add_tab(cx);
+        }
+
+        self.sync_bookmark_bar_visibility(cx);
+    }
+
+    pub(super) fn enable_browser(&mut self, cx: &mut Context<Self>) {
+        if self.cef_available {
+            return;
+        }
+
+        match CefInstance::initialize(cx) {
+            Ok(_) => {
+                self.cef_available = true;
+                self.cef_initialization_error = None;
+                self.initialize_browser_state(cx);
+            }
+            Err(error) => {
+                log::error!("[browser] Failed to initialize CEF: {error}");
+                self.cef_initialization_error = Some(error.to_string());
+            }
+        }
+        cx.notify();
     }
 
     #[cfg(not(target_os = "macos"))]

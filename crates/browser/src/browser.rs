@@ -180,27 +180,12 @@ fn attach_browser_toolbars_to_workspace(
 }
 
 pub fn init(cx: &mut App) {
-    match CefInstance::initialize(cx) {
-        Ok(_) => {
-            // Ensure CEF is shut down before the process exits. Without this,
-            // exit() triggers CEF's static CefShutdownChecker destructor which
-            // asserts that CefShutdown() was already called.
-            //
-            // CefInstance::shutdown() handles everything: it takes all browser
-            // handles from the global registry, force-closes them, drops the
-            // Rust refs (so CEF's BrowserContext ref counts reach zero), pumps
-            // the message loop, then calls cef::shutdown().
-            std::mem::forget(cx.on_app_quit(|_| async {
-                CefInstance::shutdown();
-            }));
-        }
-        Err(e) => {
-            log::error!(
-                "[browser] init() Failed to initialize CEF: {}. Browser mode will show placeholder.",
-                e
-            );
-        }
-    }
+    // CEF initializes only when the user explicitly enables Browser. Besides
+    // avoiding its startup cost for editor-only sessions, this lets Qedit
+    // explain the macOS Keychain request before Chromium presents it.
+    std::mem::forget(cx.on_app_quit(|_| async {
+        CefInstance::shutdown();
+    }));
 
     register_browser_mode_url_opener(Arc::new(open_browser_mode_url), cx);
     register_embedded_browser_item_factory(

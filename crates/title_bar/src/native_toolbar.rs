@@ -16,6 +16,7 @@ use gpui::{
     NativeToolbarItem, NativeToolbarSizeMode, Window,
 };
 use settings::Settings;
+use theme::ActiveTheme;
 use workspace::{
     Deafen, LeaveCall, Mute, ScreenShare, ShareProject, ToggleRightDock, ToggleSidebar,
 };
@@ -29,7 +30,8 @@ impl TitleBar {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let uses_gpui_title_bar = show_menus(cx);
+        let uses_gpui_title_bar =
+            show_menus(cx) || cx.theme().appearance != window.appearance().into();
         let has_active_room = ActiveCall::try_global(cx)
             .and_then(|call| call.read(cx).room().cloned())
             .is_some();

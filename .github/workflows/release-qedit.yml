@@ -9,7 +9,7 @@ on:
       version:
         description: "Release version"
         required: true
-        default: "1.0.1"
+        default: "1.0.2"
         type: string
 
 permissions:
@@ -54,16 +54,48 @@ jobs:
           perl -0pi -e 's/const YES: objc::runtime::BOOL = true;/const YES: objc::runtime::BOOL = true as objc::runtime::BOOL;/; s/const NO: objc::runtime::BOOL = false;/const NO: objc::runtime::BOOL = false as objc::runtime::BOOL;/' "$renderer"
           grep -F 'true as objc::runtime::BOOL' "$renderer"
       - name: Build Qedit
-        run: cargo build --release --features mimalloc --package zed --package cli --target ${{ matrix.target }}
+        run: |
+          cargo build --release --features mimalloc --package zed --package cli --target ${{ matrix.target }}
+          cargo build --release --package browser --bin qedit_helper --target ${{ matrix.target }}
       - name: Package app
         shell: bash
         run: |
           set -euo pipefail
           root="target/${{ matrix.target }}/release"
           app="$root/Qedit.app"
-          mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+          mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "$app/Contents/Frameworks"
           cp "$root/zed" "$app/Contents/MacOS/Qedit"
           cp crates/zed/resources/Qedit.icns "$app/Contents/Resources/Qedit.icns"
+          framework=$(find "$root/build" -path "*/cef_macos_${{ matrix.arch }}/Chromium Embedded Framework.framework" -type d -print -quit)
+          test -n "$framework"
+          ditto "$framework" "$app/Contents/Frameworks/Chromium Embedded Framework.framework"
+          helpers=("Helper" "Helper (GPU)" "Helper (Renderer)" "Helper (Plugin)" "Helper (Alerts)")
+          for helper_suffix in "${helpers[@]}"; do
+            helper_name="Qedit $helper_suffix"
+            helper_app="$app/Contents/Frameworks/$helper_name.app"
+            if [[ "$helper_suffix" == "Helper" ]]; then
+              helper_identifier="dev.qedit.Qedit.helper"
+            else
+              helper_type="${helper_suffix#Helper (}"
+              helper_type="${helper_type%)}"
+              helper_identifier="dev.qedit.Qedit.helper.$helper_type"
+            fi
+            mkdir -p "$helper_app/Contents/MacOS"
+            cp "$root/qedit_helper" "$helper_app/Contents/MacOS/$helper_name"
+            cat > "$helper_app/Contents/Info.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+          <key>CFBundleName</key><string>$helper_name</string>
+          <key>CFBundleDisplayName</key><string>$helper_name</string>
+          <key>CFBundleExecutable</key><string>$helper_name</string>
+          <key>CFBundleIdentifier</key><string>$helper_identifier</string>
+          <key>CFBundlePackageType</key><string>APPL</string>
+          <key>LSUIElement</key><true/>
+          </dict></plist>
+          PLIST
+            printf 'APPL????' > "$helper_app/Contents/PkgInfo"
+          done
           cat > "$app/Contents/Info.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -80,6 +112,12 @@ jobs:
           <key>CFBundleURLTypes</key><array><dict><key>CFBundleURLSchemes</key><array><string>qedit</string></array></dict></array>
           </dict></plist>
           PLIST
+          codesign --force --sign - "$app/Contents/Frameworks/Chromium Embedded Framework.framework"
+          for helper_suffix in "${helpers[@]}"; do
+            codesign --force --sign - "$app/Contents/Frameworks/Qedit $helper_suffix.app"
+          done
+          codesign --force --sign - "$app"
+          codesign --verify --deep --strict --verbose=2 "$app"
           ditto -c -k --sequesterRsrc --keepParent "$app" "Qedit-${RELEASE_VERSION#v}-macos-${{ matrix.arch }}.zip"
       - uses: actions/upload-artifact@v4
         with:

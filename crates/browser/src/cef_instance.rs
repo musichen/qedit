@@ -366,33 +366,6 @@ impl CefInstance {
              Chrome/145.0.7632.75 Safari/537.36",
         );
 
-        #[cfg(target_os = "macos")]
-        {
-            if let Ok(exe_path) = std::env::current_exe() {
-                if let Some(exe_dir) = exe_path.parent() {
-                    // Try bundle path first: .app/Contents/Frameworks/Qedit Helper.app/...
-                    let bundle_helper =
-                        exe_dir.join("../Frameworks/Qedit Helper.app/Contents/MacOS/Qedit Helper");
-                    // Fall back to qedit_helper next to the executable (cargo run)
-                    let dev_helper = exe_dir.join("qedit_helper");
-
-                    let helper_path = if bundle_helper.exists() {
-                        bundle_helper.canonicalize().ok()
-                    } else if dev_helper.exists() {
-                        dev_helper.canonicalize().ok()
-                    } else {
-                        None
-                    };
-
-                    if let Some(path) = helper_path {
-                        if let Some(path_str) = path.to_str() {
-                            settings.browser_subprocess_path = cef::CefString::from(path_str);
-                        }
-                    }
-                }
-            }
-        }
-
         // Set framework_dir_path and main_bundle_path only when not running from a
         // bundle (e.g. cargo run with CEF_PATH). When running from a .app bundle, CEF
         // discovers the bundle automatically via NSBundle; setting main_bundle_path to

@@ -229,6 +229,10 @@ impl BrowserTab {
                 }
                 BrowserEvent::BrowserCreated => {}
                 BrowserEvent::LoadError { url, error_text } => {
+                    if self.is_loading {
+                        self.is_loading = false;
+                        cx.emit(TabEvent::LoadingStateChanged);
+                    }
                     cx.emit(TabEvent::LoadError { url, error_text });
                 }
                 BrowserEvent::ContextMenuRequested { context } => {

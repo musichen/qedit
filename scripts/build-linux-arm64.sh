@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-version="${QEDIT_VERSION:-1.0.1}"
+version="${QEDIT_VERSION:-1.0.2}"
 target="aarch64-unknown-linux-gnu"
 rustup target add "$target"
 cargo build --release --features mimalloc --package zed --package cli --target "$target"

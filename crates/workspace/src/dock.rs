@@ -185,6 +185,7 @@ impl Render for DockButtonBar {
 
         div()
             .w_full()
+            .bg(cx.theme().colors().panel_background)
             .flex()
             .flex_col()
             .px_1()

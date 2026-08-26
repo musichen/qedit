@@ -1,5 +1,5 @@
 use crate::history::{BrowserHistory, HistoryMatch};
-use editor::{Editor, actions::SelectAll};
+use editor::{Editor, EditorElement, EditorStyle, actions::SelectAll};
 use gpui::{
     App, Bounds, Context, Corner, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
     ParentElement, Pixels, Render, SharedString, Styled, Subscription, Task, Window, anchored,
@@ -484,7 +484,13 @@ impl Render for Omnibox {
                     .items_center()
                     .overflow_hidden()
                     .child(bounds_tracker)
-                    .child(self.url_editor.clone()),
+                    .child(EditorElement::new(
+                        &self.url_editor,
+                        EditorStyle {
+                            background: theme.colors().editor_background,
+                            ..EditorStyle::default()
+                        },
+                    )),
             )
             .when(show_dropdown, |this| this.child(self.render_dropdown(cx)))
     }

@@ -12364,7 +12364,7 @@ mod tests {
             SharedString::from("Browser")
         }
 
-        fn workspace_item_kind(&self) -> Option<WorkspaceItemKind> {
+        fn workspace_item_kind(&self, _cx: &App) -> Option<WorkspaceItemKind> {
             Some(WorkspaceItemKind::Browser)
         }
     }

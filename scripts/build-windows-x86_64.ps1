@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-$version = if ($env:QEDIT_VERSION) { $env:QEDIT_VERSION } else { '1.0.1' }
+$version = if ($env:QEDIT_VERSION) { $env:QEDIT_VERSION } else { '1.0.2' }
 
 cargo build --features mimalloc --package zed --package cli
 New-Item -ItemType Directory -Force -Path package, dist | Out-Null

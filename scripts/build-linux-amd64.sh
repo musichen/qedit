@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-version="${QEDIT_VERSION:-1.0.1}"
+version="${QEDIT_VERSION:-1.0.2}"
 cargo build --release --features mimalloc --package zed --package cli
 package="qedit_${version}_amd64"
 rm -rf "$package"
