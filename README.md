@@ -12,6 +12,8 @@ Qedit is a browser, code editor, and terminal in one app. It brings browsing, co
 
 - [Build Qedit for macOS](./docs/src/development/macos.md)
 - [Build Qedit for Windows](./docs/src/development/windows.md)
+- [Build Qedit for Linux](./docs/src/development/linux.md)
+- [Build Qedit for FreeBSD](./docs/src/development/freebsd.md)
 
 For local GPUI development, use [`script/cargo-gpui-local`](./script/cargo-gpui-local) or [`script/cargo-gpui-local.ps1`](./script/cargo-gpui-local.ps1).
 
