@@ -1,9 +1,9 @@
 ---
-title: Building Zed for Linux
-description: "Guide to building zed for linux for Zed development."
+title: Building Qedit for Linux
+description: "Guide to building Qedit for Linux for Qedit development."
 ---
 
-# Building Zed for Linux
+# Building Qedit for Linux
 
 ## Repository
 

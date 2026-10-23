@@ -1,9 +1,9 @@
 ---
-title: Building Zed for FreeBSD
-description: "Guide to building zed for freebsd for Zed development."
+title: Building Qedit for FreeBSD
+description: "Guide to building Qedit for FreeBSD for Qedit development."
 ---
 
-# Building Zed for FreeBSD
+# Building Qedit for FreeBSD
 
 FreeBSD is not currently a supported platform, so this guide is a work in progress.
 
