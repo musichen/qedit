@@ -10,6 +10,8 @@ Qedit is a browser, code editor, and terminal in one app. It brings browsing, co
 
 ## Building
 
+For an overview, see [Developing Qedit](./docs/src/development.md). Platform guides:
+
 - [Build Qedit for macOS](./docs/src/development/macos.md)
 - [Build Qedit for Windows](./docs/src/development/windows.md)
 - [Build Qedit for Linux](./docs/src/development/linux.md)
