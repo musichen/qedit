@@ -1,9 +1,9 @@
 ---
-title: Building Zed for macOS
-description: "Guide to building zed for macos for Zed development."
+title: Building Qedit for macOS
+description: "Guide to building Qedit for macOS for Qedit development."
 ---
 
-# Building Zed for macOS
+# Building Qedit for macOS
 
 ## Repository
 
