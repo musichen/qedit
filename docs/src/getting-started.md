@@ -1,6 +1,6 @@
 ---
-title: Getting Started with Zed
-description: Get started with Zed, the fast open-source code editor. Essential commands, environment setup, and navigation basics.
+title: Getting Started with Qedit
+description: Get started with Qedit, the browser, code editor, and terminal in one app. Essential commands, environment setup, and navigation basics.
 ---
 
 # Getting Started
