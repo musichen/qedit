@@ -9,6 +9,7 @@ See the platform-specific instructions for building Qedit from source:
 - [macOS](./development/macos.md)
 - [Linux](./development/linux.md)
 - [Windows](./development/windows.md)
+- [FreeBSD](./development/freebsd.md)
 
 ## Keychain access
 
